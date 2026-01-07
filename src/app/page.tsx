@@ -217,11 +217,6 @@ export default function Home() {
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
               <CardTitle>Filters</CardTitle>
-              <Badge variant="outline">
-                {data
-                  ? `${filteredProperties.length} of ${data.properties.length} properties`
-                  : "Loading properties"}
-              </Badge>
             </div>
             <CollapsibleTrigger asChild>
               <Button variant="outline" size="sm">

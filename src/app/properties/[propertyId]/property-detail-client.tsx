@@ -317,10 +317,6 @@ export default function PropertyDetailClient({
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
             <CardTitle>Window</CardTitle>
-            <CardDescription>
-              Compare {windowMeta.label} ending yesterday with the previous
-              window.
-            </CardDescription>
           </div>
           <div className="w-full max-w-[220px]">
             <Select
