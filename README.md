@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GA4 New Users Dashboard
 
-## Getting Started
+Minimal internal dashboard for tracking GA4 new users across web properties using a
+service account (no OAuth).
 
-First, run the development server:
+## Prereqs
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+1. Create a Google Cloud project.
+2. Enable the APIs:
+   - Google Analytics Data API
+   - Google Analytics Admin API
+3. Create a service account and download a JSON key.
+4. IMPORTANT: In Google Analytics (signed in as enzo@design-prism.com), add the
+   service account email as a Viewer at the ACCOUNT level(s) so it can read all
+   properties/websites.
+
+## Environment variables
+
+Copy `.env.example` to `.env.local` and fill in:
+
+```
+GA_CLIENT_EMAIL=
+GA_PRIVATE_KEY=
+GA_PROPERTY_ALLOWLIST=
+DASHBOARD_PASSWORD=
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Notes:
+- `GA_PRIVATE_KEY` should include escaped newlines (`\n`) if stored in a single line.
+- `GA_PROPERTY_ALLOWLIST` is optional (comma-separated property IDs).
+- `DASHBOARD_PASSWORD` is optional; when set, Basic Auth is required for `/` and `/api/*`
+  (any username, password must match).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Local development
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev
+```
 
-## Learn More
+Open `http://localhost:3000`.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy to Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Set the env vars in Vercel (`GA_CLIENT_EMAIL`, `GA_PRIVATE_KEY`, optional allowlist,
+   optional password).
+2. Deploy the project.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## API
 
-## Deploy on Vercel
+`GET /api/dashboard?window=d1|d7|d28`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Returns the current + previous window new users for each GA4 web property.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Troubleshooting
+
+- Permission errors: confirm the service account is a Viewer at the GA account level.
+- Missing properties: check `GA_PROPERTY_ALLOWLIST` and confirm the property has a web
+  data stream.
+- Private key issues: ensure `GA_PRIVATE_KEY` uses `\n` for newlines in Vercel.
