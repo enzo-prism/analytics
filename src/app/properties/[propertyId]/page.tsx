@@ -1,9 +1,10 @@
 import PropertyDetailClient from "./property-detail-client";
 
 type PropertyPageProps = {
-  params: { propertyId: string };
+  params: Promise<{ propertyId: string }>;
 };
 
-export default function PropertyPage({ params }: PropertyPageProps) {
-  return <PropertyDetailClient propertyId={params.propertyId} />;
+export default async function PropertyPage({ params }: PropertyPageProps) {
+  const { propertyId } = await params;
+  return <PropertyDetailClient propertyId={propertyId} />;
 }

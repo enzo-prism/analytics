@@ -106,6 +106,10 @@ export default function PropertyDetailClient({
 
   const loadProperty = useCallback(
     async (nextWindow: DashboardWindow) => {
+      if (!propertyId) {
+        setError("Missing property id.");
+        return;
+      }
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       setLoading(true);
