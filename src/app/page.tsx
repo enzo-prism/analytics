@@ -38,6 +38,9 @@ const WINDOW_OPTIONS: {
   { value: "d1", label: "1 day", shortLabel: "1d" },
   { value: "d7", label: "7 days", shortLabel: "7d" },
   { value: "d28", label: "28 days", shortLabel: "28d" },
+  { value: "d90", label: "90 days", shortLabel: "90d" },
+  { value: "d180", label: "180 days", shortLabel: "180d" },
+  { value: "d365", label: "1 year", shortLabel: "1y" },
 ];
 
 const numberFormatter = new Intl.NumberFormat("en-US");

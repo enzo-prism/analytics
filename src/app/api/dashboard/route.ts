@@ -5,7 +5,14 @@ import type { DashboardWindow } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const WINDOW_VALUES: DashboardWindow[] = ["d1", "d7", "d28"];
+const WINDOW_VALUES: DashboardWindow[] = [
+  "d1",
+  "d7",
+  "d28",
+  "d90",
+  "d180",
+  "d365",
+];
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

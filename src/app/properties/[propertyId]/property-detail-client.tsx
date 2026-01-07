@@ -42,9 +42,19 @@ const WINDOW_OPTIONS: {
   { value: "d1", label: "1 day", shortLabel: "1d" },
   { value: "d7", label: "7 days", shortLabel: "7d" },
   { value: "d28", label: "28 days", shortLabel: "28d" },
+  { value: "d90", label: "90 days", shortLabel: "90d" },
+  { value: "d180", label: "180 days", shortLabel: "180d" },
+  { value: "d365", label: "1 year", shortLabel: "1y" },
 ];
 
-const WINDOW_VALUES: DashboardWindow[] = ["d1", "d7", "d28"];
+const WINDOW_VALUES: DashboardWindow[] = [
+  "d1",
+  "d7",
+  "d28",
+  "d90",
+  "d180",
+  "d365",
+];
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const percentFormatter = new Intl.NumberFormat("en-US", {

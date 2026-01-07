@@ -1,4 +1,4 @@
-export type DashboardWindow = "d1" | "d7" | "d28";
+export type DashboardWindow = "d1" | "d7" | "d28" | "d90" | "d180" | "d365";
 
 export type NewUsersDelta = {
   current: number;
