@@ -158,17 +158,10 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pb-16 pt-10 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-3">
-          <Badge variant="secondary">Internal analytics</Badge>
-          <div className="space-y-2">
-            <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-5xl">
-              New Users Pulse
-            </h1>
-            <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
-              A clean read on GA4 web properties. Compare {windowMeta.label} ending
-              yesterday against the previous window.
-            </p>
-          </div>
+        <div className="space-y-2">
+          <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-5xl">
+            New Users Pulse
+          </h1>
         </div>
         <div className="flex flex-col items-start gap-3 sm:items-end">
           <span className="text-xs text-muted-foreground">
@@ -190,12 +183,7 @@ export default function Home() {
 
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-2">
-            <CardTitle>Filters</CardTitle>
-            <CardDescription>
-              Switch the reporting window or search by property name or domain.
-            </CardDescription>
-          </div>
+          <CardTitle>Filters</CardTitle>
           <Badge variant="outline">
             {data
               ? `${filteredProperties.length} of ${data.properties.length} properties`
@@ -203,7 +191,7 @@ export default function Home() {
           </Badge>
         </CardHeader>
         <Separator />
-        <CardContent className="grid gap-5 pt-6 md:grid-cols-[1fr_1fr_0.75fr]">
+        <CardContent className="grid gap-5 pt-6 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="window-select">Window</Label>
             <Select
@@ -231,12 +219,6 @@ export default function Home() {
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Auto refresh</Label>
-            <div className="rounded-md border border-dashed border-muted-foreground/30 bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-              Every 60 seconds
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -248,7 +230,6 @@ export default function Home() {
               New users for {windowMeta.label} ending yesterday.
             </CardDescription>
           </div>
-          <Badge variant="secondary">Compared to previous window</Badge>
         </CardHeader>
         <Separator />
         <CardContent className="p-0">

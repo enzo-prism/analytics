@@ -17,6 +17,11 @@ const WINDOW_DAYS: Record<DashboardWindow, number> = {
   d28: 28,
 };
 const DEFAULT_BLOCKLIST = new Set(["508295014"]);
+const PROPERTY_NAME_OVERRIDES: Record<string, string> = {
+  "517602002": "Tahoe Chain Report app",
+  "517635591": "Viral Content Tool",
+  "508275630": "Olympic Bootworks",
+};
 
 type PropertySummary = {
   propertyId: string;
@@ -100,6 +105,11 @@ const formatDate = (date: Date): string => {
 
 const normalizeUri = (value: string): string =>
   value.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
+
+const applyDisplayNameOverride = (
+  propertyId: string,
+  displayName: string,
+): string => PROPERTY_NAME_OVERRIDES[propertyId] ?? displayName;
 
 const parseDateDimension = (value: string): string => {
   if (!/^\d{8}$/.test(value)) {
@@ -302,7 +312,10 @@ const getPropertyMetadata = async (
   const webStream = pickWebStream(streams);
   return {
     propertyId,
-    displayName: property.displayName ?? propertyId,
+    displayName: applyDisplayNameOverride(
+      propertyId,
+      property.displayName ?? propertyId,
+    ),
     defaultUri: webStream?.defaultUri ?? null,
   };
 };
@@ -520,7 +533,15 @@ export const getDashboardData = async (
     },
   );
 
-  const sortedProperties = [...reportRows, ...errorRows].sort((a, b) => {
+  const renamedProperties = [...reportRows, ...errorRows].map((property) => ({
+    ...property,
+    displayName: applyDisplayNameOverride(
+      property.propertyId,
+      property.displayName,
+    ),
+  }));
+
+  const sortedProperties = renamedProperties.sort((a, b) => {
     const aValue = a.newUsers?.current ?? -1;
     const bValue = b.newUsers?.current ?? -1;
     return bValue - aValue;
@@ -557,7 +578,7 @@ export const getPropertyDetail = async (
   const updatedAt = new Date().toISOString();
   const fallbackProperty: PropertyDetailResponse["property"] = {
     propertyId,
-    displayName: propertyId,
+    displayName: applyDisplayNameOverride(propertyId, propertyId),
     defaultUri: null,
   };
 
