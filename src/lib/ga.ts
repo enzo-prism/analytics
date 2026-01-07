@@ -25,6 +25,7 @@ const PROPERTY_NAME_OVERRIDES: Record<string, string> = {
   "517635591": "Viral Content Tool",
   "508275630": "Olympic Bootworks",
   "498175984": "Exquisite Dentistry",
+  "518867337": "Family First Smile Care",
 };
 const PROPERTY_EMOJI_OVERRIDES: Record<string, string> = {
   "508275630": "🎿",
@@ -49,6 +50,7 @@ const PROPERTY_EMOJI_OVERRIDES: Record<string, string> = {
   "514526854": "🤠",
   "509472320": "🐘",
   "502361992": "🤝",
+  "518867337": "🦷",
 };
 const PROPERTY_EMOJIS = [
   "🧭",
