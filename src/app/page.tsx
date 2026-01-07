@@ -13,6 +13,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { RefreshCcw } from "lucide-react";
+import { ChevronDown, RefreshCcw } from "lucide-react";
 
 const WINDOW_OPTIONS: {
   value: DashboardWindow;
@@ -74,6 +79,7 @@ export default function Home() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const requestIdRef = useRef(0);
 
   const loadDashboard = useCallback(async (nextWindow: DashboardWindow) => {
@@ -160,7 +166,7 @@ export default function Home() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
           <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-5xl">
-            New Users Pulse
+            Website Traffic
           </h1>
         </div>
         <div className="flex flex-col items-start gap-3 sm:items-end">
@@ -181,46 +187,64 @@ export default function Home() {
         </Alert>
       ) : null}
 
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>Filters</CardTitle>
-          <Badge variant="outline">
-            {data
-              ? `${filteredProperties.length} of ${data.properties.length} properties`
-              : "Loading properties"}
-          </Badge>
-        </CardHeader>
-        <Separator />
-        <CardContent className="grid gap-5 pt-6 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="window-select">Window</Label>
-            <Select
-              value={windowKey}
-              onValueChange={(value) => setWindowKey(value as DashboardWindow)}
-            >
-              <SelectTrigger id="window-select">
-                <SelectValue placeholder="Select window" />
-              </SelectTrigger>
-              <SelectContent>
-                {WINDOW_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="search-input">Search</Label>
-            <Input
-              id="search-input"
-              placeholder="Filter by site name or domain"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <Card>
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle>Filters</CardTitle>
+              <Badge variant="outline">
+                {data
+                  ? `${filteredProperties.length} of ${data.properties.length} properties`
+                  : "Loading properties"}
+              </Badge>
+            </div>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm">
+                {filtersOpen ? "Hide" : "Show"}
+                <ChevronDown
+                  className={`ml-2 h-4 w-4 transition-transform ${
+                    filtersOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </Button>
+            </CollapsibleTrigger>
+          </CardHeader>
+          <CollapsibleContent>
+            <Separator />
+            <CardContent className="grid gap-5 pt-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="window-select">Window</Label>
+                <Select
+                  value={windowKey}
+                  onValueChange={(value) =>
+                    setWindowKey(value as DashboardWindow)
+                  }
+                >
+                  <SelectTrigger id="window-select">
+                    <SelectValue placeholder="Select window" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WINDOW_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="search-input">Search</Label>
+                <Input
+                  id="search-input"
+                  placeholder="Filter by site name or domain"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -253,13 +277,18 @@ export default function Home() {
                     <Card key={property.propertyId} data-testid="property-card">
                       <CardHeader className="space-y-3 pb-4">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <CardTitle className="text-lg font-display">
-                              {property.displayName}
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                              Property {property.propertyId}
-                            </CardDescription>
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-xl">
+                              {property.emoji}
+                            </div>
+                            <div className="space-y-1">
+                              <CardTitle className="text-lg font-display">
+                                {property.displayName}
+                              </CardTitle>
+                              <CardDescription className="text-xs">
+                                Property {property.propertyId}
+                              </CardDescription>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             {property.error ? (

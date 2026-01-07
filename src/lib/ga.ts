@@ -22,6 +22,140 @@ const PROPERTY_NAME_OVERRIDES: Record<string, string> = {
   "517635591": "Viral Content Tool",
   "508275630": "Olympic Bootworks",
 };
+const PROPERTY_EMOJIS = [
+  "🧭",
+  "🌐",
+  "🛰️",
+  "🗺️",
+  "🗻",
+  "🏔️",
+  "🌋",
+  "🏝️",
+  "🏜️",
+  "🏙️",
+  "🌉",
+  "🌁",
+  "🛣️",
+  "🛤️",
+  "🚦",
+  "🚧",
+  "🚢",
+  "🛳️",
+  "⛵",
+  "🛶",
+  "🚤",
+  "✈️",
+  "🛫",
+  "🛬",
+  "🚁",
+  "🚀",
+  "🛸",
+  "🪐",
+  "🌙",
+  "⭐",
+  "☀️",
+  "⛈️",
+  "🌧️",
+  "🌊",
+  "🌲",
+  "🌳",
+  "🌵",
+  "🌴",
+  "🌻",
+  "🌼",
+  "🍁",
+  "🍀",
+  "🍇",
+  "🍋",
+  "🍎",
+  "🥝",
+  "🥕",
+  "🥑",
+  "🍔",
+  "🍕",
+  "🍩",
+  "🍪",
+  "🍿",
+  "🍣",
+  "🍜",
+  "🍱",
+  "🧁",
+  "🍦",
+  "🥤",
+  "🧋",
+  "🏀",
+  "⚽",
+  "🏈",
+  "🎾",
+  "🏐",
+  "🎿",
+  "🏄",
+  "🚴",
+  "🧗",
+  "🏕️",
+  "🏖️",
+  "🎢",
+  "🎡",
+  "🎠",
+  "🎬",
+  "🎧",
+  "🎤",
+  "🎹",
+  "🎸",
+  "🪕",
+  "🥁",
+  "🎲",
+  "🧩",
+  "🎯",
+  "🪄",
+  "🎨",
+  "🖌️",
+  "🧵",
+  "🪡",
+  "🔧",
+  "🪛",
+  "🧰",
+  "🧲",
+  "🔋",
+  "💡",
+  "🕯️",
+  "🧯",
+  "📌",
+  "📍",
+  "📎",
+  "🧷",
+  "📐",
+  "📏",
+  "📊",
+  "📈",
+  "📉",
+  "🗂️",
+  "🗃️",
+  "🗄️",
+  "📁",
+  "📂",
+  "🗞️",
+  "📰",
+  "📚",
+  "📖",
+  "🔍",
+  "🔎",
+  "🔑",
+  "🗝️",
+  "🔒",
+  "🔓",
+  "💎",
+  "⚙️",
+  "🧠",
+  "🦾",
+  "🧬",
+  "🧪",
+  "🧫",
+  "🪬",
+  "🧿",
+  "🪪",
+];
+const DEFAULT_EMOJI = "✨";
 
 type PropertySummary = {
   propertyId: string;
@@ -105,6 +239,18 @@ const formatDate = (date: Date): string => {
 
 const normalizeUri = (value: string): string =>
   value.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
+
+const buildEmojiMap = (propertyIds: string[]): Map<string, string> => {
+  const uniqueIds = Array.from(new Set(propertyIds)).sort(
+    (a, b) => Number(a) - Number(b),
+  );
+  const map = new Map<string, string>();
+  uniqueIds.forEach((propertyId, index) => {
+    const emoji = PROPERTY_EMOJIS[index] ?? DEFAULT_EMOJI;
+    map.set(propertyId, emoji);
+  });
+  return map;
+};
 
 const applyDisplayNameOverride = (
   propertyId: string,
@@ -317,6 +463,7 @@ const getPropertyMetadata = async (
       property.displayName ?? propertyId,
     ),
     defaultUri: webStream?.defaultUri ?? null,
+    emoji: DEFAULT_EMOJI,
   };
 };
 
@@ -496,6 +643,7 @@ export const getDashboardData = async (
         propertyId: result.summary.propertyId,
         displayName: result.summary.displayName,
         defaultUri: null,
+        emoji: DEFAULT_EMOJI,
         newUsers: null,
         error: result.error,
       });
@@ -518,6 +666,7 @@ export const getDashboardData = async (
           propertyId: result.summary.propertyId,
           displayName: result.summary.displayName,
           defaultUri: result.webStream?.defaultUri ?? null,
+          emoji: DEFAULT_EMOJI,
           newUsers,
           error: null,
         };
@@ -526,6 +675,7 @@ export const getDashboardData = async (
           propertyId: result.summary.propertyId,
           displayName: result.summary.displayName,
           defaultUri: result.webStream?.defaultUri ?? null,
+          emoji: DEFAULT_EMOJI,
           newUsers: null,
           error: withErrorMessage(error),
         };
@@ -562,10 +712,18 @@ export const getDashboardData = async (
     dedupedProperties.push(property);
   }
 
+  const emojiMap = buildEmojiMap(
+    dedupedProperties.map((property) => property.propertyId),
+  );
+  const propertiesWithEmojis = dedupedProperties.map((property) => ({
+    ...property,
+    emoji: emojiMap.get(property.propertyId) ?? DEFAULT_EMOJI,
+  }));
+
   return {
     updatedAt: new Date().toISOString(),
     window: windowKey,
-    properties: dedupedProperties,
+    properties: propertiesWithEmojis,
   };
 };
 
@@ -580,6 +738,7 @@ export const getPropertyDetail = async (
     propertyId,
     displayName: applyDisplayNameOverride(propertyId, propertyId),
     defaultUri: null,
+    emoji: DEFAULT_EMOJI,
   };
 
   if (blocklist.has(propertyId)) {
@@ -608,14 +767,30 @@ export const getPropertyDetail = async (
   const ranges = getDateRanges(windowKey);
   const days = WINDOW_DAYS[windowKey];
 
-  let property = fallbackProperty;
+  let emojiMap = new Map<string, string>();
   try {
-    property = await getPropertyMetadata(token, propertyId);
+    const summaries = await listPropertySummaries(token);
+    const filteredSummaries = allowlist
+      ? summaries.filter((summary) => allowlist.has(summary.propertyId))
+      : summaries;
+    const filteredIds = filteredSummaries
+      .filter((summary) => !blocklist.has(summary.propertyId))
+      .map((summary) => summary.propertyId);
+    emojiMap = buildEmojiMap(filteredIds);
+  } catch {
+    emojiMap = new Map<string, string>();
+  }
+
+  const emoji = emojiMap.get(propertyId) ?? DEFAULT_EMOJI;
+
+  let property = { ...fallbackProperty, emoji };
+  try {
+    property = { ...(await getPropertyMetadata(token, propertyId)), emoji };
   } catch (error) {
     return {
       updatedAt,
       window: windowKey,
-      property,
+      property: { ...property, emoji },
       summary: null,
       series: [],
       error: withErrorMessage(error),
@@ -640,7 +815,7 @@ export const getPropertyDetail = async (
     return {
       updatedAt,
       window: windowKey,
-      property,
+      property: { ...property, emoji },
       summary: {
         current: currentTotal,
         previous: previousTotal,
@@ -654,7 +829,7 @@ export const getPropertyDetail = async (
     return {
       updatedAt,
       window: windowKey,
-      property,
+      property: { ...property, emoji },
       summary: null,
       series: [],
       error: withErrorMessage(error),

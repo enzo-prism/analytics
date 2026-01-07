@@ -7,6 +7,7 @@ const propertyFixture = {
     propertyId: "123",
     displayName: "Prism",
     defaultUri: "https://www.design-prism.com",
+    emoji: "🧭",
   },
   summary: { current: 263, previous: 225, delta: 38, pct: 0.1688 },
   series: [

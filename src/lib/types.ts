@@ -11,6 +11,7 @@ export type DashboardProperty = {
   propertyId: string;
   displayName: string;
   defaultUri: string | null;
+  emoji: string;
   newUsers: NewUsersDelta | null;
   error: string | null;
 };
@@ -31,6 +32,7 @@ export type PropertyDetail = {
   propertyId: string;
   displayName: string;
   defaultUri: string | null;
+  emoji: string;
 };
 
 export type PropertyDetailResponse = {

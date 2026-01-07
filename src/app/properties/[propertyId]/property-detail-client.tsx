@@ -259,9 +259,14 @@ export default function PropertyDetailClient({
               <Badge variant="secondary">Property detail</Badge>
               <Badge variant="outline">ID {propertyId}</Badge>
             </div>
-            <h1 className="font-display text-2xl tracking-tight text-foreground sm:text-4xl">
-              {data?.property.displayName ?? "Loading property..."}
-            </h1>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">
+                {data?.property.emoji ?? "✨"}
+              </span>
+              <h1 className="font-display text-2xl tracking-tight text-foreground sm:text-4xl">
+                {data?.property.displayName ?? "Loading property..."}
+              </h1>
+            </div>
             <p className="text-xs text-muted-foreground sm:text-base">
               {data?.property.defaultUri
                 ? formatDomain(data.property.defaultUri)
