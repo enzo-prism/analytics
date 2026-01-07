@@ -28,7 +28,7 @@ export default function RootLayout({
     <html lang="en">
       <body
         className={cn(
-          "min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 font-sans text-foreground antialiased",
+          "min-h-screen bg-background font-sans text-foreground antialiased",
           spaceGrotesk.variable,
           plexSans.variable,
         )}

@@ -144,13 +144,20 @@ export default function Home() {
   const filteredProperties = useMemo(() => {
     if (!data) return [];
     const term = query.trim().toLowerCase();
-    if (!term) return data.properties;
-    return data.properties.filter((property) => {
-      const nameMatch = property.displayName.toLowerCase().includes(term);
-      const domainMatch = property.defaultUri
-        ? property.defaultUri.toLowerCase().includes(term)
-        : false;
-      return nameMatch || domainMatch;
+    const base = term
+      ? data.properties.filter((property) => {
+          const nameMatch = property.displayName.toLowerCase().includes(term);
+          const domainMatch = property.defaultUri
+            ? property.defaultUri.toLowerCase().includes(term)
+            : false;
+          return nameMatch || domainMatch;
+        })
+      : data.properties;
+
+    return [...base].sort((a, b) => {
+      const aValue = a.newUsers?.current ?? -1;
+      const bValue = b.newUsers?.current ?? -1;
+      return bValue - aValue;
     });
   }, [data, query]);
 
@@ -266,7 +273,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
-                {filteredProperties.map((property) => {
+                {filteredProperties.map((property, index) => {
                   const current = property.newUsers?.current ?? null;
                   const delta = property.newUsers?.delta ?? null;
                   const pct = property.newUsers?.pct ?? null;
@@ -275,35 +282,69 @@ export default function Home() {
 
                   return (
                     <Card key={property.propertyId} data-testid="property-card">
-                      <CardHeader className="space-y-3 pb-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-xl">
+                      <CardContent className="space-y-5 p-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-white text-2xl shadow-sm">
                               {property.emoji}
                             </div>
                             <div className="space-y-1">
-                              <CardTitle className="text-lg font-display">
-                                {property.displayName}
-                              </CardTitle>
-                              <CardDescription className="text-xs">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-display text-lg font-semibold leading-tight">
+                                  {property.displayName}
+                                </h3>
+                                {property.error ? (
+                                  <Badge variant="destructive">Error</Badge>
+                                ) : null}
+                              </div>
+                              <CardDescription className="text-[11px]">
                                 Property {property.propertyId}
                               </CardDescription>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {property.error ? (
-                              <Badge variant="destructive">Error</Badge>
-                            ) : null}
-                            <Button size="sm" variant="secondary" asChild>
-                              <Link
-                                href={`/properties/${property.propertyId}?window=${windowKey}`}
-                              >
-                                View
-                              </Link>
-                            </Button>
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-[11px] font-semibold text-muted-foreground">
+                                {index + 1}
+                              </div>
+                              <Button size="sm" variant="secondary" asChild>
+                                <Link
+                                  href={`/properties/${property.propertyId}?window=${windowKey}`}
+                                >
+                                  View
+                                </Link>
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                        <div className="text-sm text-muted-foreground">
+
+                        <div className="flex items-end justify-between gap-4">
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                            New Users ({windowMeta.shortLabel})
+                          </div>
+                          <div className="text-3xl font-semibold text-foreground">
+                            {current === null
+                              ? "n/a"
+                              : numberFormatter.format(current)}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Delta</span>
+                            <span className={`font-semibold ${deltaMeta.className}`}>
+                              {deltaMeta.text}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Percent</span>
+                            <span className={`font-semibold ${pctMeta.className}`}>
+                              {pctMeta.text}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-xs text-muted-foreground">
                           {property.defaultUri ? (
                             <a
                               className="underline-offset-4 hover:text-foreground hover:underline"
@@ -317,37 +358,7 @@ export default function Home() {
                             "Domain unavailable"
                           )}
                         </div>
-                      </CardHeader>
-                      <Separator />
-                      <CardContent className="space-y-4 pt-4">
-                        <div className="grid grid-cols-3 gap-3 text-sm">
-                          <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2">
-                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                              New Users ({windowMeta.shortLabel})
-                            </div>
-                            <div className="mt-1 text-base font-semibold">
-                              {current === null
-                                ? "n/a"
-                                : numberFormatter.format(current)}
-                            </div>
-                          </div>
-                          <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2">
-                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                              Delta
-                            </div>
-                            <div className={`mt-1 text-base font-semibold ${deltaMeta.className}`}>
-                              {deltaMeta.text}
-                            </div>
-                          </div>
-                          <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2">
-                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                              Percent
-                            </div>
-                            <div className={`mt-1 text-base font-semibold ${pctMeta.className}`}>
-                              {pctMeta.text}
-                            </div>
-                          </div>
-                        </div>
+
                         {property.error ? (
                           <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                             {property.error}
