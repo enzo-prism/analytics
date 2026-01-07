@@ -259,10 +259,10 @@ export default function PropertyDetailClient({
               <Badge variant="secondary">Property detail</Badge>
               <Badge variant="outline">ID {propertyId}</Badge>
             </div>
-            <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+            <h1 className="font-display text-2xl tracking-tight text-foreground sm:text-4xl">
               {data?.property.displayName ?? "Loading property..."}
             </h1>
-            <p className="text-sm text-muted-foreground sm:text-base">
+            <p className="text-xs text-muted-foreground sm:text-base">
               {data?.property.defaultUri
                 ? formatDomain(data.property.defaultUri)
                 : "Domain unavailable"}
@@ -315,16 +315,21 @@ export default function PropertyDetailClient({
           </div>
         </CardHeader>
         <Separator />
-        <CardContent className="grid gap-4 pt-6 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent
+          className="grid gap-4 pt-6 sm:grid-cols-2 lg:grid-cols-4"
+          data-testid="property-stats"
+        >
           {statCards.map((stat) => (
             <div
               key={stat.label}
-              className="rounded-lg border border-border/60 bg-background/70 p-4 shadow-sm"
+              className="rounded-lg border border-border/60 bg-background/70 p-3 shadow-sm sm:p-4"
             >
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 {stat.label}
               </div>
-              <div className={`mt-2 text-2xl font-semibold ${stat.tone ?? ""}`}>
+              <div
+                className={`mt-2 text-xl font-semibold sm:text-2xl ${stat.tone ?? ""}`}
+              >
                 {stat.value ?? <Skeleton className="h-7 w-24" />}
               </div>
             </div>
@@ -342,11 +347,15 @@ export default function PropertyDetailClient({
         <Separator />
         <CardContent className="pt-6">
           {series.length === 0 ? (
-            <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+            <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground sm:h-[260px]">
               {data ? "No trend data available." : "Loading chart data..."}
             </div>
           ) : (
-            <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <ChartContainer
+              config={chartConfig}
+              className="h-[240px] w-full sm:h-[300px]"
+              data-testid="property-trend-chart"
+            >
               <LineChart data={series} margin={{ left: 8, right: 20 }}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
                 <XAxis
@@ -354,12 +363,14 @@ export default function PropertyDetailClient({
                   tickFormatter={formatShortDate}
                   axisLine={false}
                   tickLine={false}
+                  minTickGap={20}
+                  tickMargin={8}
                 />
                 <YAxis
                   tickFormatter={(value) => numberFormatter.format(value)}
                   axisLine={false}
                   tickLine={false}
-                  width={60}
+                  width={48}
                 />
                 <ChartTooltip
                   cursor={false}

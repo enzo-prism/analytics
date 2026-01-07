@@ -57,6 +57,26 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 const formatDomain = (value: string) =>
   value.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
+const formatDelta = (delta: number | null) => {
+  if (delta === null) {
+    return { text: "n/a", className: "text-muted-foreground" };
+  }
+  return {
+    text: `${delta > 0 ? "+" : ""}${numberFormatter.format(delta)}`,
+    className: delta >= 0 ? "text-emerald-600" : "text-rose-600",
+  };
+};
+
+const formatPct = (pct: number | null) => {
+  if (pct === null) {
+    return { text: "n/a", className: "text-muted-foreground" };
+  }
+  return {
+    text: `${pct > 0 ? "+" : ""}${percentFormatter.format(pct)}`,
+    className: pct >= 0 ? "text-emerald-600" : "text-rose-600",
+  };
+};
+
 export default function Home() {
   const [windowKey, setWindowKey] = useState<DashboardWindow>("d7");
   const [query, setQuery] = useState("");
@@ -150,7 +170,7 @@ export default function Home() {
         <div className="space-y-3">
           <Badge variant="secondary">Internal analytics</Badge>
           <div className="space-y-2">
-            <h1 className="font-display text-4xl tracking-tight text-foreground sm:text-5xl">
+            <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-5xl">
               New Users Pulse
             </h1>
             <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
@@ -242,120 +262,194 @@ export default function Home() {
         <Separator />
         <CardContent className="p-0">
           <TooltipProvider delayDuration={200}>
-            <ScrollArea className="w-full">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40%]">Site</TableHead>
-                    <TableHead className="w-[26%]">Domain</TableHead>
-                    <TableHead className="text-right">
-                      New users ({windowMeta.shortLabel})
-                    </TableHead>
-                    <TableHead className="text-right">Delta</TableHead>
-                    <TableHead className="text-right">Percent</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProperties.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-10 text-center">
-                        {data
-                          ? "No properties match the current filter."
-                          : "Loading dashboard data."}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredProperties.map((property) => {
-                      const current = property.newUsers?.current ?? null;
-                      const delta = property.newUsers?.delta ?? null;
-                      const pct = property.newUsers?.pct ?? null;
-                      const deltaText =
-                        delta === null
-                          ? "n/a"
-                          : `${delta > 0 ? "+" : ""}${numberFormatter.format(
-                              delta,
-                            )}`;
-                      const pctText =
-                        pct === null
-                          ? "n/a"
-                          : `${pct > 0 ? "+" : ""}${percentFormatter.format(
-                              pct,
-                            )}`;
-                      const deltaClass =
-                        delta === null
-                          ? "text-muted-foreground"
-                          : delta >= 0
-                            ? "text-emerald-600"
-                            : "text-rose-600";
+            <div className="md:hidden" data-testid="mobile-list">
+              {filteredProperties.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  {data
+                    ? "No properties match the current filter."
+                    : "Loading dashboard data."}
+                </div>
+              ) : (
+                <div className="space-y-3 p-4">
+                  {filteredProperties.map((property) => {
+                    const current = property.newUsers?.current ?? null;
+                    const delta = property.newUsers?.delta ?? null;
+                    const pct = property.newUsers?.pct ?? null;
+                    const deltaMeta = formatDelta(delta);
+                    const pctMeta = formatPct(pct);
 
-                      return (
-                        <TableRow key={property.propertyId}>
-                          <TableCell className="space-y-2">
+                    return (
+                      <Card key={property.propertyId}>
+                        <CardContent className="space-y-4 p-4">
+                          <div className="flex items-start justify-between gap-4">
                             <div className="space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-display text-base font-semibold">
                                   {property.displayName}
                                 </span>
                                 {property.error ? (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Badge variant="destructive">Error</Badge>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="max-w-xs text-xs">
-                                      {property.error}
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  <Badge variant="destructive">Error</Badge>
                                 ) : null}
                               </div>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline">
-                                Property {property.propertyId}
-                              </Badge>
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link
-                                  href={`/properties/${property.propertyId}?window=${windowKey}`}
-                                >
-                                  View
-                                </Link>
-                              </Button>
+                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                <Badge variant="outline">
+                                  Property {property.propertyId}
+                                </Badge>
+                              </div>
                             </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {property.defaultUri ? (
-                              <a
-                                className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                                href={property.defaultUri}
-                                target="_blank"
-                                rel="noreferrer"
+                            <Button size="sm" variant="secondary" asChild>
+                              <Link
+                                href={`/properties/${property.propertyId}?window=${windowKey}`}
                               >
-                                {formatDomain(property.defaultUri)}
-                              </a>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">
-                                n/a
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {current === null
-                              ? "n/a"
-                              : numberFormatter.format(current)}
-                          </TableCell>
-                          <TableCell className={`text-right ${deltaClass}`}>
-                            {deltaText}
-                          </TableCell>
-                          <TableCell className={`text-right ${deltaClass}`}>
-                            {pctText}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-              <ScrollBar orientation="horizontal" />
-            </ScrollArea>
+                                View
+                              </Link>
+                            </Button>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {property.defaultUri
+                              ? formatDomain(property.defaultUri)
+                              : "Domain unavailable"}
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 text-sm">
+                            <div className="space-y-1">
+                              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                New Users
+                              </div>
+                              <div className="font-semibold">
+                                {current === null
+                                  ? "n/a"
+                                  : numberFormatter.format(current)}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Delta
+                              </div>
+                              <div className={`font-semibold ${deltaMeta.className}`}>
+                                {deltaMeta.text}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Percent
+                              </div>
+                              <div className={`font-semibold ${pctMeta.className}`}>
+                                {pctMeta.text}
+                              </div>
+                            </div>
+                          </div>
+                          {property.error ? (
+                            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                              {property.error}
+                            </div>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="hidden md:block" data-testid="desktop-table">
+              <ScrollArea className="w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[40%]">Site</TableHead>
+                      <TableHead className="w-[26%]">Domain</TableHead>
+                      <TableHead className="text-right">
+                        New users ({windowMeta.shortLabel})
+                      </TableHead>
+                      <TableHead className="text-right">Delta</TableHead>
+                      <TableHead className="text-right">Percent</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProperties.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-10 text-center">
+                          {data
+                            ? "No properties match the current filter."
+                            : "Loading dashboard data."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredProperties.map((property) => {
+                        const current = property.newUsers?.current ?? null;
+                        const delta = property.newUsers?.delta ?? null;
+                        const pct = property.newUsers?.pct ?? null;
+                        const deltaMeta = formatDelta(delta);
+                        const pctMeta = formatPct(pct);
+
+                        return (
+                          <TableRow key={property.propertyId}>
+                            <TableCell className="space-y-2">
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-display text-base font-semibold">
+                                    {property.displayName}
+                                  </span>
+                                  {property.error ? (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge variant="destructive">Error</Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-xs">
+                                        {property.error}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ) : null}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <Badge variant="outline">
+                                    Property {property.propertyId}
+                                  </Badge>
+                                  <Button variant="ghost" size="sm" asChild>
+                                    <Link
+                                      href={`/properties/${property.propertyId}?window=${windowKey}`}
+                                    >
+                                      View
+                                    </Link>
+                                  </Button>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {property.defaultUri ? (
+                                <a
+                                  className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                                  href={property.defaultUri}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {formatDomain(property.defaultUri)}
+                                </a>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">
+                                  n/a
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {current === null
+                                ? "n/a"
+                                : numberFormatter.format(current)}
+                            </TableCell>
+                            <TableCell className={`text-right ${deltaMeta.className}`}>
+                              {deltaMeta.text}
+                            </TableCell>
+                            <TableCell className={`text-right ${pctMeta.className}`}>
+                              {pctMeta.text}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+            </div>
           </TooltipProvider>
         </CardContent>
       </Card>
