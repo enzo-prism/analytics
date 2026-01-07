@@ -63,11 +63,11 @@ const updatedFormatter = new Intl.DateTimeFormat("en-US", {
 const chartConfig = {
   current: {
     label: "Current window",
-    color: "hsl(var(--chart-3))",
+    color: "hsl(222 70% 50%)",
   },
   previous: {
     label: "Previous window",
-    color: "hsl(var(--chart-5))",
+    color: "hsl(173 58% 39%)",
   },
 } satisfies ChartConfig;
 
