@@ -83,6 +83,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [showUpdatedAt, setShowUpdatedAt] = useState(false);
   const requestIdRef = useRef(0);
 
   const loadDashboard = useCallback(async (nextWindow: DashboardWindow) => {
@@ -169,7 +170,19 @@ export default function Home() {
     WINDOW_OPTIONS[1];
   const updatedAt = data?.updatedAt
     ? dateFormatter.format(new Date(data.updatedAt))
-    : "Not loaded";
+    : null;
+
+  useEffect(() => {
+    if (!updatedAt) {
+      setShowUpdatedAt(false);
+      return;
+    }
+    setShowUpdatedAt(true);
+    const timeout = setTimeout(() => {
+      setShowUpdatedAt(false);
+    }, 2000);
+    return () => clearTimeout(timeout);
+  }, [updatedAt]);
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pb-16 pt-10 sm:px-6 lg:px-8">
@@ -180,9 +193,11 @@ export default function Home() {
           </h1>
         </div>
         <div className="flex flex-col items-start gap-3 sm:items-end">
-          <span className="text-xs text-muted-foreground">
-            Last updated: {updatedAt}
-          </span>
+          {showUpdatedAt && updatedAt ? (
+            <span className="text-xs text-muted-foreground">
+              Last updated: {updatedAt}
+            </span>
+          ) : null}
           <Button onClick={() => loadDashboard(windowKey)} disabled={loading}>
             <RefreshCcw className="mr-2 h-4 w-4" />
             {loading ? "Refreshing" : "Refresh"}

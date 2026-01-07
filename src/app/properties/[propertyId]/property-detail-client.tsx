@@ -112,6 +112,7 @@ export default function PropertyDetailClient({
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showUpdatedAt, setShowUpdatedAt] = useState(false);
   const requestIdRef = useRef(0);
 
   const loadProperty = useCallback(
@@ -202,7 +203,7 @@ export default function PropertyDetailClient({
 
   const updatedAt = data?.updatedAt
     ? updatedFormatter.format(new Date(data.updatedAt))
-    : "Not loaded";
+    : null;
 
   const summary = data?.summary;
   const series = data?.series ?? [];
@@ -254,6 +255,18 @@ export default function PropertyDetailClient({
     },
   ];
 
+  useEffect(() => {
+    if (!updatedAt) {
+      setShowUpdatedAt(false);
+      return;
+    }
+    setShowUpdatedAt(true);
+    const timeout = setTimeout(() => {
+      setShowUpdatedAt(false);
+    }, 2000);
+    return () => clearTimeout(timeout);
+  }, [updatedAt]);
+
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pb-16 pt-10 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -261,7 +274,7 @@ export default function PropertyDetailClient({
           <Button variant="ghost" size="sm" asChild>
             <Link href="/">
               <ArrowLeft className="h-4 w-4" />
-              Back to dashboard
+              Back
             </Link>
           </Button>
           <div className="space-y-3">
@@ -281,9 +294,11 @@ export default function PropertyDetailClient({
           </div>
         </div>
         <div className="flex flex-col items-start gap-3 sm:items-end">
-          <span className="text-xs text-muted-foreground">
-            Last updated: {updatedAt}
-          </span>
+          {showUpdatedAt && updatedAt ? (
+            <span className="text-xs text-muted-foreground">
+              Last updated: {updatedAt}
+            </span>
+          ) : null}
           <Button onClick={() => loadProperty(windowKey)} disabled={loading}>
             <RefreshCcw className="mr-2 h-4 w-4" />
             {loading ? "Refreshing" : "Refresh"}
