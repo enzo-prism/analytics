@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, RefreshCcw } from "lucide-react";
+import { ChevronDown, RefreshCcw, Triangle } from "lucide-react";
 
 const WINDOW_OPTIONS: {
   value: DashboardWindow;
@@ -342,7 +342,10 @@ export default function Home() {
 
                         <div className="flex flex-wrap items-center gap-4 text-xs">
                           <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground">Delta</span>
+                            <span className="inline-flex items-center gap-1 text-muted-foreground">
+                              <Triangle className="h-3 w-3" />
+                              Delta
+                            </span>
                             <span className={`font-semibold ${deltaMeta.className}`}>
                               {deltaMeta.text}
                             </span>

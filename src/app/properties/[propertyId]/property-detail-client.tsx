@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, RefreshCcw } from "lucide-react";
+import { ArrowLeft, RefreshCcw, Triangle } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -225,6 +225,7 @@ export default function PropertyDetailClient({
     },
     {
       label: "Delta",
+      icon: <Triangle className="h-3 w-3" />,
       value:
         summary?.delta !== undefined
           ? `${summary.delta > 0 ? "+" : ""}${numberFormatter.format(
@@ -347,7 +348,14 @@ export default function PropertyDetailClient({
               className="rounded-lg border border-border/60 bg-background/70 p-3 shadow-sm sm:p-4"
             >
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                {stat.label}
+                {stat.icon ? (
+                  <span className="inline-flex items-center gap-1">
+                    {stat.icon}
+                    {stat.label}
+                  </span>
+                ) : (
+                  stat.label
+                )}
               </div>
               <div
                 className={`mt-2 text-xl font-semibold sm:text-2xl ${stat.tone ?? ""}`}
