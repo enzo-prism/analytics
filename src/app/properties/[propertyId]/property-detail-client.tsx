@@ -265,10 +265,6 @@ export default function PropertyDetailClient({
             </Link>
           </Button>
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">Property detail</Badge>
-              <Badge variant="outline">ID {propertyId}</Badge>
-            </div>
             <div className="flex items-center gap-3">
               <span className="text-2xl">
                 {data?.property.emoji ?? "✨"}
