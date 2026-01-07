@@ -282,15 +282,15 @@ export default function Home() {
 
                   return (
                     <Card key={property.propertyId} data-testid="property-card">
-                      <CardContent className="space-y-5 p-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-start gap-4">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-white text-2xl shadow-sm">
+                      <CardContent className="space-y-4 p-4 sm:p-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-white text-2xl shadow-sm">
                               {property.emoji}
                             </div>
                             <div className="space-y-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="font-display text-lg font-semibold leading-tight">
+                                <h3 className="font-display text-lg font-semibold leading-tight sm:text-xl">
                                   {property.displayName}
                                 </h3>
                                 {property.error ? (
@@ -302,27 +302,25 @@ export default function Home() {
                               </CardDescription>
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="flex items-center gap-2">
-                              <div className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-[11px] font-semibold text-muted-foreground">
-                                {index + 1}
-                              </div>
-                              <Button size="sm" variant="secondary" asChild>
-                                <Link
-                                  href={`/properties/${property.propertyId}?window=${windowKey}`}
-                                >
-                                  View
-                                </Link>
-                              </Button>
+                          <div className="flex items-center gap-2 sm:flex-col sm:items-end">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-[11px] font-semibold text-muted-foreground">
+                              {index + 1}
                             </div>
+                            <Button size="sm" variant="secondary" asChild>
+                              <Link
+                                href={`/properties/${property.propertyId}?window=${windowKey}`}
+                              >
+                                View
+                              </Link>
+                            </Button>
                           </div>
                         </div>
 
-                        <div className="flex items-end justify-between gap-4">
-                          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                        <div className="rounded-xl border border-border/70 bg-white px-4 py-3">
+                          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                             New Users ({windowMeta.shortLabel})
                           </div>
-                          <div className="text-3xl font-semibold text-foreground">
+                          <div className="mt-1 text-3xl font-semibold text-foreground sm:text-4xl">
                             {current === null
                               ? "n/a"
                               : numberFormatter.format(current)}
