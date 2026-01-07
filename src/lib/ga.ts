@@ -16,6 +16,7 @@ const WINDOW_DAYS: Record<DashboardWindow, number> = {
   d7: 7,
   d28: 28,
 };
+const DEFAULT_BLOCKLIST = new Set(["508295014"]);
 
 type PropertySummary = {
   propertyId: string;
@@ -97,6 +98,9 @@ const formatDate = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
+const normalizeUri = (value: string): string =>
+  value.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
+
 const parseDateDimension = (value: string): string => {
   if (!/^\d{8}$/.test(value)) {
     return value;
@@ -150,6 +154,16 @@ const getAllowlist = (): Set<string> | null => {
     .map((value) => value.trim())
     .filter(Boolean);
   return ids.length ? new Set(ids) : null;
+};
+
+const getBlocklist = (): Set<string> => {
+  const raw = process.env.GA_PROPERTY_BLOCKLIST;
+  if (!raw) return new Set(DEFAULT_BLOCKLIST);
+  const ids = raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return new Set([...DEFAULT_BLOCKLIST, ...ids]);
 };
 
 const getAccessToken = async (): Promise<string> => {
@@ -430,11 +444,15 @@ export const getDashboardData = async (
   const token = await getAccessToken();
   const ranges = getDateRanges(windowKey);
   const allowlist = getAllowlist();
+  const blocklist = getBlocklist();
 
   const summaries = await listPropertySummaries(token);
-  const filteredSummaries = allowlist
+  let filteredSummaries = allowlist
     ? summaries.filter((summary) => allowlist.has(summary.propertyId))
     : summaries;
+  filteredSummaries = filteredSummaries.filter(
+    (summary) => !blocklist.has(summary.propertyId),
+  );
 
   const streamResults = await runLimited(
     filteredSummaries,
@@ -502,16 +520,31 @@ export const getDashboardData = async (
     },
   );
 
-  const properties = [...reportRows, ...errorRows].sort((a, b) => {
+  const sortedProperties = [...reportRows, ...errorRows].sort((a, b) => {
     const aValue = a.newUsers?.current ?? -1;
     const bValue = b.newUsers?.current ?? -1;
     return bValue - aValue;
   });
 
+  const dedupedProperties: DashboardProperty[] = [];
+  const seenDomains = new Set<string>();
+  for (const property of sortedProperties) {
+    if (!property.defaultUri) {
+      dedupedProperties.push(property);
+      continue;
+    }
+    const key = normalizeUri(property.defaultUri);
+    if (seenDomains.has(key)) {
+      continue;
+    }
+    seenDomains.add(key);
+    dedupedProperties.push(property);
+  }
+
   return {
     updatedAt: new Date().toISOString(),
     window: windowKey,
-    properties,
+    properties: dedupedProperties,
   };
 };
 
@@ -520,12 +553,24 @@ export const getPropertyDetail = async (
   windowKey: DashboardWindow,
 ): Promise<PropertyDetailResponse> => {
   const allowlist = getAllowlist();
+  const blocklist = getBlocklist();
   const updatedAt = new Date().toISOString();
   const fallbackProperty: PropertyDetailResponse["property"] = {
     propertyId,
     displayName: propertyId,
     defaultUri: null,
   };
+
+  if (blocklist.has(propertyId)) {
+    return {
+      updatedAt,
+      window: windowKey,
+      property: fallbackProperty,
+      summary: null,
+      series: [],
+      error: "Property is excluded from the dashboard.",
+    };
+  }
 
   if (allowlist && !allowlist.has(propertyId)) {
     return {

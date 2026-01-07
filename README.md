@@ -22,12 +22,14 @@ Copy `.env.example` to `.env.local` and fill in:
 GA_CLIENT_EMAIL=
 GA_PRIVATE_KEY=
 GA_PROPERTY_ALLOWLIST=
+GA_PROPERTY_BLOCKLIST=
 DASHBOARD_PASSWORD=
 ```
 
 Notes:
 - `GA_PRIVATE_KEY` should include escaped newlines (`\n`) if stored in a single line.
 - `GA_PROPERTY_ALLOWLIST` is optional (comma-separated property IDs).
+- `GA_PROPERTY_BLOCKLIST` is optional (comma-separated property IDs to hide).
 - `DASHBOARD_PASSWORD` is optional; when set, Basic Auth is required for `/` and `/api/*`
   (any username, password must match).
 
