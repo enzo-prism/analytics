@@ -36,8 +36,8 @@ test("mobile dashboard uses card layout without horizontal scroll", async ({
 
   await page.goto("/");
   await expect(page.getByText("New Users Pulse")).toBeVisible();
-  await expect(page.getByTestId("mobile-list")).toBeVisible();
-  await expect(page.getByTestId("desktop-table")).toBeHidden();
+  await expect(page.getByTestId("property-cards")).toBeVisible();
+  await expect(page.getByTestId("property-card")).toHaveCount(2);
   await expect(page.getByText("Olympic Bootworks Website")).toBeVisible();
   await expect(page.getByText("New Users")).toBeVisible();
 
