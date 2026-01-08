@@ -15,7 +15,7 @@ const plexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "GA4 New Users Dashboard",
+  title: "traffic",
   description: "Internal GA4 new users snapshot across properties.",
 };
 
