@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, RefreshCcw, Triangle } from "lucide-react";
+import { ArrowLeft, Triangle } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -111,7 +111,6 @@ export default function PropertyDetailClient({
   const [windowKey, setWindowKey] = useState<DashboardWindow>(initialWindow);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [showUpdatedAt, setShowUpdatedAt] = useState(false);
   const requestIdRef = useRef(0);
 
@@ -123,7 +122,6 @@ export default function PropertyDetailClient({
       }
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
-      setLoading(true);
       setError(null);
 
       try {
@@ -164,11 +162,6 @@ export default function PropertyDetailClient({
               : "Failed to load property data.",
           );
         }
-      } finally {
-        if (requestId === requestIdRef.current) {
-          setLoading(false);
-        }
-      }
     },
     [propertyId],
   );
@@ -294,17 +287,11 @@ export default function PropertyDetailClient({
             </p>
           </div>
         </div>
-        <div className="flex flex-col items-start gap-3 sm:items-end">
-          {showUpdatedAt && updatedAt ? (
-            <span className="text-xs text-muted-foreground">
-              Last updated: {updatedAt}
-            </span>
-          ) : null}
-          <Button onClick={() => loadProperty(windowKey)} disabled={loading}>
-            <RefreshCcw className="mr-2 h-4 w-4" />
-            {loading ? "Refreshing" : "Refresh"}
-          </Button>
-        </div>
+        {showUpdatedAt && updatedAt ? (
+          <span className="text-xs text-muted-foreground">
+            Last updated: {updatedAt}
+          </span>
+        ) : null}
       </header>
 
       {error ? (

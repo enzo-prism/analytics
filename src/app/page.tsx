@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, RefreshCcw, Triangle } from "lucide-react";
+import { ChevronDown, Triangle } from "lucide-react";
 
 const WINDOW_OPTIONS: {
   value: DashboardWindow;
@@ -81,7 +81,6 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showUpdatedAt, setShowUpdatedAt] = useState(false);
   const requestIdRef = useRef(0);
@@ -89,7 +88,6 @@ export default function Home() {
   const loadDashboard = useCallback(async (nextWindow: DashboardWindow) => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setLoading(true);
     setError(null);
 
     try {
@@ -127,11 +125,6 @@ export default function Home() {
             : "Failed to load dashboard data.",
         );
       }
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setLoading(false);
-      }
-    }
   }, []);
 
   useEffect(() => {
@@ -192,17 +185,11 @@ export default function Home() {
             Website Traffic
           </h1>
         </div>
-        <div className="flex flex-col items-start gap-3 sm:items-end">
-          {showUpdatedAt && updatedAt ? (
-            <span className="text-xs text-muted-foreground">
-              Last updated: {updatedAt}
-            </span>
-          ) : null}
-          <Button onClick={() => loadDashboard(windowKey)} disabled={loading}>
-            <RefreshCcw className="mr-2 h-4 w-4" />
-            {loading ? "Refreshing" : "Refresh"}
-          </Button>
-        </div>
+        {showUpdatedAt && updatedAt ? (
+          <span className="text-xs text-muted-foreground">
+            Last updated: {updatedAt}
+          </span>
+        ) : null}
       </header>
 
       {error ? (
