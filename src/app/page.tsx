@@ -125,6 +125,7 @@ export default function Home() {
             : "Failed to load dashboard data.",
         );
       }
+    }
   }, []);
 
   useEffect(() => {

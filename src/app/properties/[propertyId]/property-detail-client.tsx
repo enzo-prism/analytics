@@ -162,6 +162,7 @@ export default function PropertyDetailClient({
               : "Failed to load property data.",
           );
         }
+      }
     },
     [propertyId],
   );
