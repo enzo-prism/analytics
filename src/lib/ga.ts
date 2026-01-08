@@ -22,7 +22,7 @@ const WINDOW_DAYS: Record<DashboardWindow, number> = {
 const DEFAULT_BLOCKLIST = new Set(["508295014", "500238593"]);
 const PROPERTY_NAME_OVERRIDES: Record<string, string> = {
   "517602002": "Tahoe Chain Report app",
-  "517635591": "Viral Content Tool",
+  "517635591": "Viral Content app",
   "508275630": "Olympic Bootworks",
   "498175984": "Exquisite Dentistry",
   "518867337": "Family First Smile Care",
