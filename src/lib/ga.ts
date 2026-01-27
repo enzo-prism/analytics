@@ -22,6 +22,7 @@ const WINDOW_DAYS: Record<DashboardWindow, number> = {
   d365: 365,
 };
 const TOTAL_WINDOW_DAYS: Record<TotalWindow, number> = {
+  d7: 7,
   d30: 30,
   d60: 60,
   d90: 90,

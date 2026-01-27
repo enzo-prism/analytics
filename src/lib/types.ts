@@ -1,5 +1,5 @@
 export type DashboardWindow = "d1" | "d7" | "d28" | "d90" | "d180" | "d365";
-export type TotalWindow = "d30" | "d60" | "d90" | "d365";
+export type TotalWindow = "d7" | "d30" | "d60" | "d90" | "d365";
 
 export type NewUsersDelta = {
   current: number;

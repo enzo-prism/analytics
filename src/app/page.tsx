@@ -53,6 +53,7 @@ const TOTAL_WINDOW_OPTIONS: {
   label: string;
   shortLabel: string;
 }[] = [
+  { value: "d7", label: "7 days", shortLabel: "7d" },
   { value: "d30", label: "30 days", shortLabel: "30d" },
   { value: "d60", label: "60 days", shortLabel: "60d" },
   { value: "d90", label: "90 days", shortLabel: "90d" },
@@ -94,7 +95,7 @@ const formatPct = (pct: number | null) => {
 
 export default function Home() {
   const [windowKey, setWindowKey] = useState<DashboardWindow>("d7");
-  const [totalWindow, setTotalWindow] = useState<TotalWindow>("d30");
+  const [totalWindow, setTotalWindow] = useState<TotalWindow>("d7");
   const [query, setQuery] = useState("");
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [totalData, setTotalData] = useState<TotalResponse | null>(null);

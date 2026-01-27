@@ -5,14 +5,14 @@ import type { TotalWindow } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const WINDOW_VALUES: TotalWindow[] = ["d30", "d60", "d90", "d365"];
+const WINDOW_VALUES: TotalWindow[] = ["d7", "d30", "d60", "d90", "d365"];
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const windowParam = searchParams.get("window") ?? "d30";
+  const windowParam = searchParams.get("window") ?? "d7";
   const windowKey = WINDOW_VALUES.includes(windowParam as TotalWindow)
     ? (windowParam as TotalWindow)
-    : "d30";
+    : "d7";
 
   try {
     const data = await getTotalNewUsers(windowKey);
