@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DashboardResponse, DashboardWindow } from "@/lib/types";
+import type {
+  DashboardResponse,
+  DashboardWindow,
+  TotalResponse,
+  TotalWindow,
+} from "@/lib/types";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +48,17 @@ const WINDOW_OPTIONS: {
   { value: "d365", label: "1 year", shortLabel: "1y" },
 ];
 
+const TOTAL_WINDOW_OPTIONS: {
+  value: TotalWindow;
+  label: string;
+  shortLabel: string;
+}[] = [
+  { value: "d30", label: "30 days", shortLabel: "30d" },
+  { value: "d60", label: "60 days", shortLabel: "60d" },
+  { value: "d90", label: "90 days", shortLabel: "90d" },
+  { value: "d365", label: "1 year", shortLabel: "1y" },
+];
+
 const numberFormatter = new Intl.NumberFormat("en-US");
 const percentFormatter = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -78,12 +94,16 @@ const formatPct = (pct: number | null) => {
 
 export default function Home() {
   const [windowKey, setWindowKey] = useState<DashboardWindow>("d7");
+  const [totalWindow, setTotalWindow] = useState<TotalWindow>("d30");
   const [query, setQuery] = useState("");
   const [data, setData] = useState<DashboardResponse | null>(null);
+  const [totalData, setTotalData] = useState<TotalResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [totalError, setTotalError] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showUpdatedAt, setShowUpdatedAt] = useState(false);
   const requestIdRef = useRef(0);
+  const totalRequestIdRef = useRef(0);
 
   const loadDashboard = useCallback(async (nextWindow: DashboardWindow) => {
     const requestId = requestIdRef.current + 1;
@@ -128,9 +148,56 @@ export default function Home() {
     }
   }, []);
 
+  const loadTotal = useCallback(async (nextWindow: TotalWindow) => {
+    const requestId = totalRequestIdRef.current + 1;
+    totalRequestIdRef.current = requestId;
+    setTotalError(null);
+
+    try {
+      const response = await fetch(`/api/total?window=${nextWindow}`, {
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const message =
+          typeof payload?.error === "string"
+            ? payload.error
+            : "Failed to load total new users.";
+        throw new Error(message);
+      }
+
+      if (!payload) {
+        throw new Error("Empty response from the total API.");
+      }
+
+      if (requestId === totalRequestIdRef.current) {
+        setTotalData(payload as TotalResponse);
+      }
+    } catch (fetchError) {
+      if (
+        fetchError instanceof DOMException &&
+        fetchError.name === "AbortError"
+      ) {
+        return;
+      }
+      if (requestId === totalRequestIdRef.current) {
+        setTotalError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Failed to load total new users.",
+        );
+      }
+    }
+  }, []);
+
   useEffect(() => {
     loadDashboard(windowKey);
   }, [loadDashboard, windowKey]);
+
+  useEffect(() => {
+    loadTotal(totalWindow);
+  }, [loadTotal, totalWindow]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -138,6 +205,13 @@ export default function Home() {
     }, 60000);
     return () => clearInterval(interval);
   }, [loadDashboard, windowKey]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadTotal(totalWindow);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [loadTotal, totalWindow]);
 
   const filteredProperties = useMemo(() => {
     if (!data) return [];
@@ -162,9 +236,24 @@ export default function Home() {
   const windowMeta =
     WINDOW_OPTIONS.find((option) => option.value === windowKey) ??
     WINDOW_OPTIONS[1];
+  const totalWindowMeta =
+    TOTAL_WINDOW_OPTIONS.find((option) => option.value === totalWindow) ??
+    TOTAL_WINDOW_OPTIONS[0];
   const updatedAt = data?.updatedAt
     ? dateFormatter.format(new Date(data.updatedAt))
     : null;
+  const totalValue = totalData?.total ?? null;
+  const totalPropertyCount = totalData?.propertyCount ?? 0;
+  const totalErrorCount = totalData?.errorCount ?? 0;
+  const totalStatus =
+    totalError ??
+    (!totalData
+      ? "Loading total new users."
+      : totalErrorCount > 0
+        ? `Partial data: ${totalErrorCount} properties failed to load.`
+        : totalPropertyCount === 0
+          ? "No properties available."
+          : `Across ${totalPropertyCount} properties.`);
 
   useEffect(() => {
     if (!updatedAt) {
@@ -199,6 +288,54 @@ export default function Home() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
+
+      <Card data-testid="total-new-users-card">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <CardTitle>Total new users</CardTitle>
+            <CardDescription>
+              Last {totalWindowMeta.label} ending yesterday.
+            </CardDescription>
+          </div>
+          <div className="space-y-2 sm:text-right">
+            <Label htmlFor="total-window-select">Window</Label>
+            <Select
+              value={totalWindow}
+              onValueChange={(value) => setTotalWindow(value as TotalWindow)}
+            >
+              <SelectTrigger id="total-window-select">
+                <SelectValue placeholder="Select window" />
+              </SelectTrigger>
+              <SelectContent>
+                {TOTAL_WINDOW_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <Separator />
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+              Total New Users ({totalWindowMeta.shortLabel})
+            </div>
+            <div
+              className="text-4xl font-semibold text-foreground"
+              data-testid="total-new-users"
+            >
+              {totalValue === null
+                ? totalError
+                  ? "n/a"
+                  : "Loading..."
+                : numberFormatter.format(totalValue)}
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground">{totalStatus}</div>
+        </CardContent>
+      </Card>
 
       <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
         <Card>

@@ -6,6 +6,8 @@ import type {
   NewUsersDelta,
   PropertyDetailResponse,
   PropertySeriesPoint,
+  TotalResponse,
+  TotalWindow,
 } from "@/lib/types";
 
 const ADMIN_BASE = "https://analyticsadmin.googleapis.com/v1beta";
@@ -17,6 +19,12 @@ const WINDOW_DAYS: Record<DashboardWindow, number> = {
   d28: 28,
   d90: 90,
   d180: 180,
+  d365: 365,
+};
+const TOTAL_WINDOW_DAYS: Record<TotalWindow, number> = {
+  d30: 30,
+  d60: 60,
+  d90: 90,
   d365: 365,
 };
 const DEFAULT_BLOCKLIST = new Set(["508295014", "500238593"]);
@@ -355,6 +363,20 @@ const getDateRanges = (windowKey: DashboardWindow): {
   };
 };
 
+const getCurrentDateRange = (days: number): DateRange => {
+  const now = new Date();
+  const todayUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const currentEnd = addDays(todayUtc, -1);
+  const currentStart = addDays(currentEnd, -(days - 1));
+
+  return {
+    startDate: formatDate(currentStart),
+    endDate: formatDate(currentEnd),
+  };
+};
+
 const getAllowlist = (): Set<string> | null => {
   const raw = process.env.GA_PROPERTY_ALLOWLIST;
   if (!raw) return null;
@@ -570,6 +592,35 @@ const fetchNewUsers = async (
   return { current, previous, delta, pct };
 };
 
+const fetchNewUsersTotal = async (
+  token: string,
+  propertyId: string,
+  range: DateRange,
+): Promise<number> => {
+  const url = `${DATA_BASE}/properties/${propertyId}:runReport`;
+  const body = {
+    dateRanges: [range],
+    metrics: [{ name: "newUsers" }],
+  };
+
+  const data = await fetchJson<RunReportResponse>(url, token, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const rows = data.rows ?? [];
+  if (!rows.length) {
+    return 0;
+  }
+  return rows.reduce(
+    (sum, row) => sum + Number(row.metricValues?.[0]?.value ?? 0),
+    0,
+  );
+};
+
 const fetchNewUsersSeries = async (
   token: string,
   propertyId: string,
@@ -780,6 +831,103 @@ export const getDashboardData = async (
     updatedAt: new Date().toISOString(),
     window: windowKey,
     properties: propertiesWithEmojis,
+  };
+};
+
+export const getTotalNewUsers = async (
+  windowKey: TotalWindow,
+): Promise<TotalResponse> => {
+  const token = await getAccessToken();
+  const range = getCurrentDateRange(TOTAL_WINDOW_DAYS[windowKey]);
+  const allowlist = getAllowlist();
+  const blocklist = getBlocklist();
+
+  const summaries = await listPropertySummaries(token);
+  let filteredSummaries = allowlist
+    ? summaries.filter((summary) => allowlist.has(summary.propertyId))
+    : summaries;
+  filteredSummaries = filteredSummaries.filter(
+    (summary) => !blocklist.has(summary.propertyId),
+  );
+
+  const streamResults = await runLimited(
+    filteredSummaries,
+    5,
+    async (summary): Promise<StreamResult | null> => {
+      try {
+        const streams = await listDataStreams(token, summary.propertyId);
+        const webStream = pickWebStream(streams);
+        if (!webStream) {
+          return null;
+        }
+        return { summary, webStream, error: null };
+      } catch (error) {
+        return { summary, webStream: null, error: withErrorMessage(error) };
+      }
+    },
+  );
+
+  let errorCount = 0;
+  const reportTargets: StreamResult[] = [];
+  for (const result of streamResults) {
+    if (!result) {
+      continue;
+    }
+    if (result.error) {
+      errorCount += 1;
+      continue;
+    }
+    reportTargets.push(result);
+  }
+
+  const dedupedTargets: StreamResult[] = [];
+  const seenDomains = new Set<string>();
+  for (const result of reportTargets) {
+    const uri = result.webStream?.defaultUri;
+    if (!uri) {
+      dedupedTargets.push(result);
+      continue;
+    }
+    const key = normalizeUri(uri);
+    if (seenDomains.has(key)) {
+      continue;
+    }
+    seenDomains.add(key);
+    dedupedTargets.push(result);
+  }
+
+  const totals = await runLimited(
+    dedupedTargets,
+    5,
+    async (result): Promise<{ total: number; error: string | null }> => {
+      try {
+        const total = await fetchNewUsersTotal(
+          token,
+          result.summary.propertyId,
+          range,
+        );
+        return { total, error: null };
+      } catch (error) {
+        return { total: 0, error: withErrorMessage(error) };
+      }
+    },
+  );
+
+  let total = 0;
+  for (const result of totals) {
+    if (result.error) {
+      errorCount += 1;
+      continue;
+    }
+    total += result.total;
+  }
+
+  return {
+    updatedAt: new Date().toISOString(),
+    window: windowKey,
+    total,
+    propertyCount: dedupedTargets.length,
+    errorCount,
   };
 };
 

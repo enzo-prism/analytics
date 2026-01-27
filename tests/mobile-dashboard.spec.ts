@@ -23,6 +23,14 @@ const dashboardFixture = {
   ],
 };
 
+const totalFixture = {
+  updatedAt: "2026-01-07T00:00:00Z",
+  window: "d30",
+  total: 1172,
+  propertyCount: 2,
+  errorCount: 0,
+};
+
 test.use({ viewport: { width: 390, height: 844 } });
 
 test("mobile dashboard uses card layout without horizontal scroll", async ({
@@ -35,9 +43,17 @@ test("mobile dashboard uses card layout without horizontal scroll", async ({
       body: JSON.stringify(dashboardFixture),
     });
   });
+  await page.route("**/api/total?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(totalFixture),
+    });
+  });
 
   await page.goto("/");
-  await expect(page.getByText("New Users Pulse")).toBeVisible();
+  await expect(page.getByText("Website Traffic")).toBeVisible();
+  await expect(page.getByTestId("total-new-users")).toBeVisible();
   await expect(page.getByTestId("property-cards")).toBeVisible();
   await expect(page.getByTestId("property-card")).toHaveCount(2);
   await expect(page.getByText("Olympic Bootworks Website")).toBeVisible();
