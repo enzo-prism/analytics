@@ -57,7 +57,9 @@ test("mobile dashboard uses card layout without horizontal scroll", async ({
   await expect(page.getByTestId("property-cards")).toBeVisible();
   await expect(page.getByTestId("property-card")).toHaveCount(2);
   await expect(page.getByText("Olympic Bootworks Website")).toBeVisible();
-  await expect(page.getByText("New Users")).toBeVisible();
+  await expect(
+    page.getByTestId("property-card").first().getByText("New Users (7d)"),
+  ).toBeVisible();
 
   const hasOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,

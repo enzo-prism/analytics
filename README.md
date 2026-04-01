@@ -23,15 +23,12 @@ GA_CLIENT_EMAIL=
 GA_PRIVATE_KEY=
 GA_PROPERTY_ALLOWLIST=
 GA_PROPERTY_BLOCKLIST=
-DASHBOARD_PASSWORD=
 ```
 
 Notes:
 - `GA_PRIVATE_KEY` should include escaped newlines (`\n`) if stored in a single line.
 - `GA_PROPERTY_ALLOWLIST` is optional (comma-separated property IDs).
 - `GA_PROPERTY_BLOCKLIST` is optional (comma-separated property IDs to hide).
-- `DASHBOARD_PASSWORD` is optional; when set, Basic Auth is required for `/` and `/api/*`
-  (any username, password must match).
 
 ## Local development
 
@@ -45,7 +42,7 @@ Open `http://localhost:3000`.
 ## Deploy to Vercel
 
 1. Set the env vars in Vercel (`GA_CLIENT_EMAIL`, `GA_PRIVATE_KEY`, optional allowlist,
-   optional password).
+   optional blocklist).
 2. Deploy the project.
 
 ## API

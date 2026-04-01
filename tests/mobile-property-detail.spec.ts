@@ -34,7 +34,7 @@ test("mobile property detail shows stats and chart", async ({ page }) => {
   });
 
   await page.goto("/properties/123?window=d7");
-  await expect(page.getByText("Prism")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Prism" })).toBeVisible();
   await expect(page.getByTestId("property-stats")).toBeVisible();
   await expect(page.getByTestId("property-trend-chart")).toBeVisible();
 
