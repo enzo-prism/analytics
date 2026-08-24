@@ -56,6 +56,8 @@ Returns the current + previous window new users for each GA4 web property.
 Date windows end on the last completed day in each GA4 property's reporting
 timezone. When multiple properties point at the same normalized website domain,
 the dashboard and total endpoints consistently use the newest property ID.
+Transient Google API throttling, server errors, and network stalls use short,
+bounded retries with per-request timeouts.
 
 ## Troubleshooting
 

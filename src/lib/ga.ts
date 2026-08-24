@@ -255,8 +255,9 @@ type StreamResult = {
 };
 
 const DEFAULT_ERROR = "Unexpected response from Google APIs.";
-const GOOGLE_API_MAX_ATTEMPTS = 4;
-const GOOGLE_API_RETRY_DELAYS_MS = [300, 900, 1_800];
+const GOOGLE_API_MAX_ATTEMPTS = 3;
+const GOOGLE_API_REQUEST_TIMEOUT_MS = 5_000;
+const GOOGLE_API_RETRY_DELAYS_MS = [300, 900];
 
 export const isRetryableGoogleStatus = (status: number): boolean =>
   status === 429 ||
@@ -466,15 +467,25 @@ const fetchJson = async <T>(
   options: RequestInit = {},
 ): Promise<T> => {
   for (let attempt = 0; attempt < GOOGLE_API_MAX_ATTEMPTS; attempt += 1) {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        ...(options.headers ?? {}),
-      },
-      cache: "no-store",
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          ...(options.headers ?? {}),
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(GOOGLE_API_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (attempt < GOOGLE_API_MAX_ATTEMPTS - 1) {
+        await wait(GOOGLE_API_RETRY_DELAYS_MS[attempt] ?? 900);
+        continue;
+      }
+      throw error;
+    }
 
     if (response.ok) {
       return (await response.json()) as T;
