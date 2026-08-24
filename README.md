@@ -7,7 +7,11 @@ and renders one responsive card per unique website.
 ## What it tracks
 
 - Current versus previous-period `newUsers` for 1, 7, 28, 90, 180, or 365 days.
-- Portfolio totals, growth/decline status, search, sorting, filtering, and pagination.
+- A deliberately minimal overview with refresh, reporting-window, and status controls only.
+- Fully clickable property cards showing the property name, current new users, and
+  current-versus-prior change.
+- Every property matching the active status filter in one responsive grid, with
+  no client-side search, user-selectable sorting, or pagination.
 - Per-property daily trend charts with accessible tabular data.
 - Property-local reporting windows ending on the last completed day.
 
@@ -109,5 +113,5 @@ bounded retries with per-request timeouts.
 - Missing duplicate: a newer property with the same normalized domain may have
   replaced the older property intentionally.
 - Private key issues: ensure `GA_PRIVATE_KEY` uses `\n` for newlines in Vercel.
-- Partial data: requests retry bounded 429/5xx failures, but permanent property
-  errors remain visible in the dashboard's data-issues count.
+- Partial data: requests retry bounded 429/5xx failures, while permanent property
+  errors remain visible under the Data issues filter and on the affected card.

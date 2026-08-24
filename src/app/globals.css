@@ -68,8 +68,7 @@
   }
 }
 
-.font-mono,
-[data-testid="total-new-users"] {
+.font-mono {
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, "Liberation Mono", monospace;
   font-variant-numeric: tabular-nums;

@@ -48,10 +48,15 @@ npx tsc --noEmit
 npm run build
 ```
 
-Exercise the dashboard at desktop, tablet, and mobile widths. Verify search,
-status filters, sorting, pagination, reporting-window changes, property detail,
-and the accessible trend table. Check for horizontal overflow and browser-console
-errors.
+Exercise the dashboard at desktop, tablet, and mobile widths. Confirm the visible
+top row contains only refresh and reporting-window controls; the overview has no
+visible branding/title/timestamp, summary tiles, search, user-selectable sort, or
+pagination. Verify every matching property renders in one responsive grid and
+each card shows only its property name, new-user value, and previous-period
+comparison while still opening its detail page. Verify status and reporting-window
+changes, property detail, and the accessible trend table. On mobile, verify compact
+cards, multi-line names, safe-area spacing, 44px minimum control targets, no
+horizontal overflow, and no browser-console errors.
 
 ## Release checklist
 
@@ -68,7 +73,9 @@ errors.
    - property count matches the service-account/web-stream/dedupe result;
    - error count is expected;
    - aggregate new users equal the sum of rendered property responses.
-8. Load the production UI and verify the same totals and property count render.
+8. Load the production overview and verify the minimal chrome, property count,
+   complete card grid, and status filter. Open at least one card and verify its
+   detail trend and accessible table.
 
 Keep Git state, build state, deployment state, and live data readback distinct in
 release notes.
