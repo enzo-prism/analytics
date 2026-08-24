@@ -3,6 +3,7 @@ import {
   dedupeStreamResultsByDomain,
   getCurrentDateRange,
   getDateRanges,
+  isRetryableGoogleStatus,
 } from "../src/lib/ga";
 
 test("date windows end on the last completed day in the property timezone", () => {
@@ -44,4 +45,13 @@ test("duplicate domains always select the newest property before reports run", (
 
   expect(dedupeStreamResultsByDomain([legacy, current])).toEqual([current]);
   expect(dedupeStreamResultsByDomain([current, legacy])).toEqual([current]);
+});
+
+test("only transient Google API failures are retried", () => {
+  for (const status of [429, 500, 502, 503, 504]) {
+    expect(isRetryableGoogleStatus(status)).toBe(true);
+  }
+  for (const status of [400, 401, 403, 404]) {
+    expect(isRetryableGoogleStatus(status)).toBe(false);
+  }
 });

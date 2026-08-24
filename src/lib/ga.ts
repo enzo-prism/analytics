@@ -255,6 +255,29 @@ type StreamResult = {
 };
 
 const DEFAULT_ERROR = "Unexpected response from Google APIs.";
+const GOOGLE_API_MAX_ATTEMPTS = 4;
+const GOOGLE_API_RETRY_DELAYS_MS = [300, 900, 1_800];
+
+export const isRetryableGoogleStatus = (status: number): boolean =>
+  status === 429 ||
+  status === 500 ||
+  status === 502 ||
+  status === 503 ||
+  status === 504;
+
+const wait = (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const getRetryDelay = (response: Response, attempt: number): number => {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1_000, 5_000);
+    }
+  }
+  return GOOGLE_API_RETRY_DELAYS_MS[attempt] ?? 1_800;
+};
 
 const withErrorMessage = (error: unknown): string => {
   if (error instanceof Error && error.message) {
@@ -442,17 +465,30 @@ const fetchJson = async <T>(
   token: string,
   options: RequestInit = {},
 ): Promise<T> => {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      ...(options.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  for (let attempt = 0; attempt < GOOGLE_API_MAX_ATTEMPTS; attempt += 1) {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        ...(options.headers ?? {}),
+      },
+      cache: "no-store",
+    });
 
-  if (!response.ok) {
+    if (response.ok) {
+      return (await response.json()) as T;
+    }
+
+    const shouldRetry =
+      isRetryableGoogleStatus(response.status) &&
+      attempt < GOOGLE_API_MAX_ATTEMPTS - 1;
+    if (shouldRetry) {
+      await response.body?.cancel();
+      await wait(getRetryDelay(response, attempt));
+      continue;
+    }
+
     let detail = "";
     try {
       detail = await response.text();
@@ -465,7 +501,7 @@ const fetchJson = async <T>(
     );
   }
 
-  return (await response.json()) as T;
+  throw new Error(DEFAULT_ERROR);
 };
 
 const listPropertySummaries = async (
