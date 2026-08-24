@@ -1,22 +1,21 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-display",
+const geistSans = Geist({
+  variable: "--font-sans",
   subsets: ["latin"],
 });
 
-const plexSans = IBM_Plex_Sans({
-  variable: "--font-sans",
+const geistMono = Geist_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
 });
 
 export const metadata: Metadata = {
-  title: "traffic",
-  description: "Internal GA4 new users snapshot across properties.",
+  title: "New Users / GA Portfolio",
+  description: "Live GA4 new-user performance across the full property portfolio.",
 };
 
 export default function RootLayout({
@@ -25,13 +24,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      className={cn("dark", geistSans.variable, geistMono.variable)}
+    >
       <body
-        className={cn(
-          "min-h-screen bg-background font-sans text-foreground antialiased",
-          spaceGrotesk.variable,
-          plexSans.variable,
-        )}
+        className="min-h-screen bg-background font-sans text-foreground antialiased"
       >
         {children}
       </body>

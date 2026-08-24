@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/test-results/
 
 # next.js
 /.next/
@@ -35,6 +36,12 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# local audit artifacts
+/work/
+/outputs/
+/design-qa.md
+/tsconfig.audit.json
 
 # typescript
 *.tsbuildinfo
