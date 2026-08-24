@@ -3,6 +3,7 @@ import {
   dedupeStreamResultsByDomain,
   getCurrentDateRange,
   getDateRanges,
+  getPropertyDetail,
   isRetryableGoogleStatus,
 } from "../src/lib/ga";
 
@@ -54,4 +55,13 @@ test("only transient Google API failures are retried", () => {
   for (const status of [400, 401, 403, 404]) {
     expect(isRetryableGoogleStatus(status)).toBe(false);
   }
+});
+
+test("hidden properties cannot be loaded directly", async () => {
+  const result = await getPropertyDetail("518332323", "d7");
+
+  expect(result.property.propertyId).toBe("518332323");
+  expect(result.summary).toBeNull();
+  expect(result.series).toEqual([]);
+  expect(result.error).toBe("Property is excluded from the dashboard.");
 });

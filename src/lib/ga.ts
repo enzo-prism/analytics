@@ -36,6 +36,7 @@ const PROPERTY_NAME_OVERRIDES: Record<string, string> = {
   "498175984": "Exquisite Dentistry",
   "518867337": "Family First Smile Care",
 };
+const HIDDEN_PROPERTY_IDS = new Set(["518332323"]);
 const PROPERTY_EMOJI_OVERRIDES: Record<string, string> = {
   "508275630": "🎿",
   "498175984": "😄",
@@ -433,12 +434,12 @@ const getAllowlist = (): Set<string> | null => {
 
 const getBlocklist = (): Set<string> => {
   const raw = process.env.GA_PROPERTY_BLOCKLIST;
-  if (!raw) return new Set();
+  if (!raw) return new Set(HIDDEN_PROPERTY_IDS);
   const ids = raw
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-  return new Set(ids);
+  return new Set([...HIDDEN_PROPERTY_IDS, ...ids]);
 };
 
 const getAccessToken = async (): Promise<string> => {
