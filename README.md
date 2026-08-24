@@ -29,6 +29,8 @@ Notes:
 - `GA_PRIVATE_KEY` should include escaped newlines (`\n`) if stored in a single line.
 - `GA_PROPERTY_ALLOWLIST` is optional (comma-separated property IDs).
 - `GA_PROPERTY_BLOCKLIST` is optional (comma-separated property IDs to hide).
+  There are no source-code exclusions; production exclusions must be explicit in
+  this variable.
 
 ## Local development
 
@@ -50,6 +52,10 @@ Open `http://localhost:3000`.
 `GET /api/dashboard?window=d1|d7|d28`
 
 Returns the current + previous window new users for each GA4 web property.
+
+Date windows end on the last completed day in each GA4 property's reporting
+timezone. When multiple properties point at the same normalized website domain,
+the dashboard and total endpoints consistently use the newest property ID.
 
 ## Troubleshooting
 

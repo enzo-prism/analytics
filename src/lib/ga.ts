@@ -28,7 +28,6 @@ const TOTAL_WINDOW_DAYS: Record<TotalWindow, number> = {
   d90: 90,
   d365: 365,
 };
-const DEFAULT_BLOCKLIST = new Set(["508295014", "500238593"]);
 const PROPERTY_NAME_OVERRIDES: Record<string, string> = {
   "517602002": "Tahoe Chain Report app",
   "517635591": "Viral Content app",
@@ -207,6 +206,7 @@ type WebStreamInfo = {
 
 type PropertyResponse = {
   displayName?: string;
+  timeZone?: string;
 };
 
 type DateRange = {
@@ -250,6 +250,7 @@ type SeriesRow = {
 type StreamResult = {
   summary: PropertySummary;
   webStream: WebStreamInfo | null;
+  timeZone: string | null;
   error: string | null;
 };
 
@@ -338,16 +339,32 @@ const buildDateList = (startDate: string, days: number): string[] => {
   );
 };
 
-const getDateRanges = (windowKey: DashboardWindow): {
+const getTodayInTimeZone = (timeZone: string, now: Date): Date => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  return new Date(
+    Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)),
+  );
+};
+
+export const getDateRanges = (
+  windowKey: DashboardWindow,
+  timeZone = "UTC",
+  now = new Date(),
+): {
   current: DateRange;
   previous: DateRange;
 } => {
   const days = WINDOW_DAYS[windowKey];
-  const now = new Date();
-  const todayUtc = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const currentEnd = addDays(todayUtc, -1);
+  const today = getTodayInTimeZone(timeZone, now);
+  const currentEnd = addDays(today, -1);
   const currentStart = addDays(currentEnd, -(days - 1));
   const previousEnd = addDays(currentStart, -1);
   const previousStart = addDays(previousEnd, -(days - 1));
@@ -364,12 +381,13 @@ const getDateRanges = (windowKey: DashboardWindow): {
   };
 };
 
-const getCurrentDateRange = (days: number): DateRange => {
-  const now = new Date();
-  const todayUtc = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const currentEnd = addDays(todayUtc, -1);
+export const getCurrentDateRange = (
+  days: number,
+  timeZone = "UTC",
+  now = new Date(),
+): DateRange => {
+  const today = getTodayInTimeZone(timeZone, now);
+  const currentEnd = addDays(today, -1);
   const currentStart = addDays(currentEnd, -(days - 1));
 
   return {
@@ -390,12 +408,12 @@ const getAllowlist = (): Set<string> | null => {
 
 const getBlocklist = (): Set<string> => {
   const raw = process.env.GA_PROPERTY_BLOCKLIST;
-  if (!raw) return new Set(DEFAULT_BLOCKLIST);
+  if (!raw) return new Set();
   const ids = raw
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-  return new Set([...DEFAULT_BLOCKLIST, ...ids]);
+  return new Set(ids);
 };
 
 const getAccessToken = async (): Promise<string> => {
@@ -525,7 +543,7 @@ const pickWebStream = (
 const getPropertyMetadata = async (
   token: string,
   propertyId: string,
-): Promise<PropertyDetailResponse["property"]> => {
+): Promise<PropertyDetailResponse["property"] & { timeZone: string }> => {
   const property = await fetchJson<PropertyResponse>(
     `${ADMIN_BASE}/properties/${propertyId}`,
     token,
@@ -540,6 +558,7 @@ const getPropertyMetadata = async (
     ),
     defaultUri: webStream?.defaultUri ?? null,
     emoji: applyEmojiOverride(propertyId, DEFAULT_EMOJI),
+    timeZone: property.timeZone ?? "UTC",
   };
 };
 
@@ -703,11 +722,35 @@ const runLimited = async <T, R>(
   return results;
 };
 
+export const dedupeStreamResultsByDomain = <T extends StreamResult>(
+  results: T[],
+): T[] => {
+  const selected = new Map<string, T>();
+  const withoutDomain: T[] = [];
+
+  for (const result of results) {
+    const uri = result.webStream?.defaultUri;
+    if (!uri) {
+      withoutDomain.push(result);
+      continue;
+    }
+    const key = normalizeUri(uri);
+    const current = selected.get(key);
+    if (
+      !current ||
+      Number(result.summary.propertyId) > Number(current.summary.propertyId)
+    ) {
+      selected.set(key, result);
+    }
+  }
+
+  return [...selected.values(), ...withoutDomain];
+};
+
 export const getDashboardData = async (
   windowKey: DashboardWindow,
 ): Promise<DashboardResponse> => {
   const token = await getAccessToken();
-  const ranges = getDateRanges(windowKey);
   const allowlist = getAllowlist();
   const blocklist = getBlocklist();
 
@@ -724,14 +767,26 @@ export const getDashboardData = async (
     5,
     async (summary): Promise<StreamResult | null> => {
       try {
-        const streams = await listDataStreams(token, summary.propertyId);
-        const webStream = pickWebStream(streams);
-        if (!webStream) {
+        const metadata = await getPropertyMetadata(token, summary.propertyId);
+        if (!metadata.defaultUri) {
           return null;
         }
-        return { summary, webStream, error: null };
+        return {
+          summary,
+          webStream: {
+            defaultUri: metadata.defaultUri,
+            measurementId: null,
+          },
+          timeZone: metadata.timeZone,
+          error: null,
+        };
       } catch (error) {
-        return { summary, webStream: null, error: withErrorMessage(error) };
+        return {
+          summary,
+          webStream: null,
+          timeZone: null,
+          error: withErrorMessage(error),
+        };
       }
     },
   );
@@ -757,11 +812,17 @@ export const getDashboardData = async (
     reportTargets.push(result);
   }
 
+  const dedupedReportTargets = dedupeStreamResultsByDomain(reportTargets);
+
   const reportRows = await runLimited(
-    reportTargets,
+    dedupedReportTargets,
     5,
     async (result): Promise<DashboardProperty> => {
       try {
+        const ranges = getDateRanges(
+          windowKey,
+          result.timeZone ?? "UTC",
+        );
         const newUsers = await fetchNewUsers(
           token,
           result.summary.propertyId,
@@ -839,7 +900,6 @@ export const getTotalNewUsers = async (
   windowKey: TotalWindow,
 ): Promise<TotalResponse> => {
   const token = await getAccessToken();
-  const range = getCurrentDateRange(TOTAL_WINDOW_DAYS[windowKey]);
   const allowlist = getAllowlist();
   const blocklist = getBlocklist();
 
@@ -856,14 +916,26 @@ export const getTotalNewUsers = async (
     5,
     async (summary): Promise<StreamResult | null> => {
       try {
-        const streams = await listDataStreams(token, summary.propertyId);
-        const webStream = pickWebStream(streams);
-        if (!webStream) {
+        const metadata = await getPropertyMetadata(token, summary.propertyId);
+        if (!metadata.defaultUri) {
           return null;
         }
-        return { summary, webStream, error: null };
+        return {
+          summary,
+          webStream: {
+            defaultUri: metadata.defaultUri,
+            measurementId: null,
+          },
+          timeZone: metadata.timeZone,
+          error: null,
+        };
       } catch (error) {
-        return { summary, webStream: null, error: withErrorMessage(error) };
+        return {
+          summary,
+          webStream: null,
+          timeZone: null,
+          error: withErrorMessage(error),
+        };
       }
     },
   );
@@ -881,27 +953,17 @@ export const getTotalNewUsers = async (
     reportTargets.push(result);
   }
 
-  const dedupedTargets: StreamResult[] = [];
-  const seenDomains = new Set<string>();
-  for (const result of reportTargets) {
-    const uri = result.webStream?.defaultUri;
-    if (!uri) {
-      dedupedTargets.push(result);
-      continue;
-    }
-    const key = normalizeUri(uri);
-    if (seenDomains.has(key)) {
-      continue;
-    }
-    seenDomains.add(key);
-    dedupedTargets.push(result);
-  }
+  const dedupedTargets = dedupeStreamResultsByDomain(reportTargets);
 
   const totals = await runLimited(
     dedupedTargets,
     5,
     async (result): Promise<{ total: number; error: string | null }> => {
       try {
+        const range = getCurrentDateRange(
+          TOTAL_WINDOW_DAYS[windowKey],
+          result.timeZone ?? "UTC",
+        );
         const total = await fetchNewUsersTotal(
           token,
           result.summary.propertyId,
@@ -969,7 +1031,6 @@ export const getPropertyDetail = async (
   }
 
   const token = await getAccessToken();
-  const ranges = getDateRanges(windowKey);
   const days = WINDOW_DAYS[windowKey];
 
   let emojiMap = new Map<string, string>();
@@ -992,8 +1053,16 @@ export const getPropertyDetail = async (
   );
 
   let property = { ...fallbackProperty, emoji };
+  let propertyTimeZone = "UTC";
   try {
-    property = { ...(await getPropertyMetadata(token, propertyId)), emoji };
+    const metadata = await getPropertyMetadata(token, propertyId);
+    propertyTimeZone = metadata.timeZone;
+    property = {
+      propertyId: metadata.propertyId,
+      displayName: metadata.displayName,
+      defaultUri: metadata.defaultUri,
+      emoji,
+    };
   } catch (error) {
     return {
       updatedAt,
@@ -1006,6 +1075,7 @@ export const getPropertyDetail = async (
   }
 
   try {
+    const ranges = getDateRanges(windowKey, propertyTimeZone);
     const [currentRows, previousRows] = await Promise.all([
       fetchNewUsersSeries(token, propertyId, ranges.current),
       fetchNewUsersSeries(token, propertyId, ranges.previous),
