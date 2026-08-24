@@ -29,6 +29,7 @@ const TOTAL_WINDOW_DAYS: Record<TotalWindow, number> = {
   d365: 365,
 };
 const PROPERTY_NAME_OVERRIDES: Record<string, string> = {
+  "356958502": "Roseville Dental Academy",
   "517602002": "Tahoe Chain Report app",
   "517635591": "Viral Content app",
   "508275630": "Olympic Bootworks",
