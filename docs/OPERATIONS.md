@@ -58,6 +58,29 @@ changes, property detail, and the accessible trend table. On mobile, verify comp
 cards, multi-line names, safe-area spacing, 44px minimum control targets, no
 horizontal overflow, and no browser-console errors.
 
+### Semantic color verification
+
+Treat color as operational meaning, not decoration:
+
+- Current raw totals are foreground white; previous raw totals are muted gray.
+- The trend chart uses a solid foreground line for Current and a dashed muted
+  line for Previous. The accessible table uses the same neutral hierarchy.
+- A change is green only at `>= +15%` and `>= +10` seven-day-normalized users.
+- A change is red at `<= -20%` and `<= -10` seven-day-normalized users.
+- A decline is critical at `<= -40%` and `<= -20` seven-day-normalized users,
+  or when current users are zero after at least `10` normalized previous users.
+- Normalize impact as `delta × 7 ÷ reporting-window days`. Both gates are
+  inclusive, so test the exact boundaries as well as just-under-boundary values.
+- The red priority banner appears only for critical declines. Growing and
+  Declining filters remain directional and may include neutrally toned changes.
+- Data-current and loading statuses are neutral. A blocking connection failure
+  is red; a refresh failure that preserves usable data is muted.
+- An unavailable percentage (`n/a`) is muted even if the absolute delta has a
+  semantic tone.
+
+At 320px width and browser zoom, expand the accessible trend table and confirm
+it scrolls horizontally inside its own container without widening the page.
+
 ## Release checklist
 
 1. Confirm the branch is `main` and is even with `origin/main` before release work.
@@ -76,6 +99,10 @@ horizontal overflow, and no browser-console errors.
 8. Load the production overview and verify the minimal chrome, property count,
    complete card grid, and status filter. Open at least one card and verify its
    detail trend and accessible table.
+9. Exercise fixtures or known properties on both sides of each semantic color
+   threshold. Confirm raw totals never inherit trend colors, the chart legend
+   matches the solid/dashed series, normal status stays neutral, and only a
+   critical decline produces the red priority banner.
 
 Keep Git state, build state, deployment state, and live data readback distinct in
 release notes.

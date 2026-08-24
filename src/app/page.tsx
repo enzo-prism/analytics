@@ -16,6 +16,7 @@ import type {
   DashboardResponse,
   DashboardWindow,
 } from "@/lib/types";
+import { classifyTrend, type TrendTone } from "@/lib/trend";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -70,23 +71,26 @@ const statusMeta = {
   growing: {
     label: "Growing",
     icon: ArrowUpRight,
-    valueClass: "text-positive",
   },
   declining: {
     label: "Declining",
     icon: ArrowDownRight,
-    valueClass: "text-negative",
   },
   flat: {
     label: "Flat",
     icon: CircleMinus,
-    valueClass: "text-muted-foreground",
   },
   issue: {
     label: "Issue",
     icon: AlertTriangle,
-    valueClass: "text-muted-foreground",
   },
+};
+
+const trendToneClass: Record<TrendTone, string> = {
+  neutral: "text-muted-foreground",
+  positive: "text-positive",
+  negative: "text-negative",
+  critical: "text-negative",
 };
 
 export default function Home() {
@@ -118,7 +122,7 @@ export default function Home() {
       }
     } catch {
       if (requestId === requestIdRef.current) {
-        setError("We could not refresh Google Analytics. Existing values remain visible.");
+        setError("We could not refresh Google Analytics.");
       }
     } finally {
       if (requestId === requestIdRef.current) {
@@ -136,16 +140,22 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [loadDashboard, windowKey]);
 
+  const dataWindow = data?.window ?? windowKey;
+
   const attention = useMemo(
     () =>
       [...(data?.properties ?? [])]
-        .filter((property) => property.newUsers && property.newUsers.delta < 0)
+        .filter(
+          (property) =>
+            property.newUsers &&
+            classifyTrend(property.newUsers, dataWindow) === "critical",
+        )
         .sort(
           (a, b) =>
             (a.newUsers?.delta ?? Number.POSITIVE_INFINITY) -
             (b.newUsers?.delta ?? Number.POSITIVE_INFINITY),
         )[0],
-    [data],
+    [data, dataWindow],
   );
 
   const visibleProperties = useMemo(
@@ -157,11 +167,11 @@ export default function Home() {
     [data, statusFilter],
   );
 
-  const dataWindow = data?.window ?? windowKey;
   const dataWindowMeta =
     WINDOW_OPTIONS.find((option) => option.value === dataWindow) ??
     WINDOW_OPTIONS[1];
   const isInitialLoad = isLoading && !data;
+  const hasBlockingError = Boolean(error && !data);
 
   return (
     <main
@@ -212,11 +222,26 @@ export default function Home() {
       </div>
 
       {error ? (
-        <Alert className="rounded-xl border-border bg-card text-foreground shadow-sm" role="status">
-          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+        <Alert
+          className={
+            "rounded-xl shadow-sm " +
+            (hasBlockingError
+              ? "border-negative/30 bg-negative-muted text-negative-foreground [&>svg]:text-negative"
+              : "border-border bg-card text-muted-foreground [&>svg]:text-muted-foreground")
+          }
+          role="status"
+          data-testid="dashboard-error"
+          data-error-severity={hasBlockingError ? "blocking" : "stale"}
+        >
+          <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Refresh failed</AlertTitle>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>{error}</span>
+            <span>
+              {error}{" "}
+              {data
+                ? "Existing values remain visible."
+                : "No analytics values are available yet."}
+            </span>
             <Button variant="outline" size="sm" className="h-11 w-full rounded-xl border-border sm:h-8 sm:w-auto sm:rounded-lg" onClick={() => loadDashboard(windowKey)}>
               Retry
             </Button>
@@ -328,6 +353,11 @@ export default function Home() {
               {visibleProperties.map((property) => {
                 const status = getStatus(property);
                 const StatusIcon = statusMeta[status].icon;
+                const tone = property.newUsers
+                  ? classifyTrend(property.newUsers, dataWindow)
+                  : "neutral";
+                const valueClass =
+                  status === "issue" ? "text-negative" : trendToneClass[tone];
                 return (
                   <Link
                     key={property.propertyId}
@@ -364,7 +394,9 @@ export default function Home() {
 
                           {property.newUsers ? (
                             <div
-                              className={`inline-flex max-w-[58%] flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-right text-xs leading-snug sm:mt-auto sm:max-w-none sm:justify-start sm:pt-7 sm:text-left sm:text-sm ${statusMeta[status].valueClass}`}
+                              className={`inline-flex max-w-[58%] flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-right text-xs leading-snug sm:mt-auto sm:max-w-none sm:justify-start sm:pt-7 sm:text-left sm:text-sm ${valueClass}`}
+                              data-testid="property-change"
+                              data-trend-tone={tone}
                             >
                               <StatusIcon aria-hidden="true" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                               <span className="sr-only">{statusMeta[status].label}:</span>
@@ -372,13 +404,23 @@ export default function Home() {
                                 {formatSignedNumber(property.newUsers.delta)}
                               </span>
                               <span aria-hidden="true" className="text-muted-foreground">·</span>
-                              <span className="font-mono tabular-nums">
+                              <span
+                                className={`font-mono tabular-nums ${
+                                  property.newUsers.pct === null
+                                    ? "text-muted-foreground"
+                                    : ""
+                                }`}
+                              >
                                 {formatSignedPercent(property.newUsers.pct)}
                               </span>
                               <span className="text-muted-foreground">vs prior</span>
                             </div>
                           ) : (
-                            <div className="inline-flex max-w-[58%] items-center justify-end gap-2 text-right text-xs text-muted-foreground sm:mt-auto sm:max-w-none sm:justify-start sm:pt-7 sm:text-left sm:text-sm">
+                            <div
+                              className={`inline-flex max-w-[58%] items-center justify-end gap-2 text-right text-xs sm:mt-auto sm:max-w-none sm:justify-start sm:pt-7 sm:text-left sm:text-sm ${status === "issue" ? "text-negative" : "text-muted-foreground"}`}
+                              data-testid="property-change"
+                              data-trend-tone={status === "issue" ? "critical" : "neutral"}
+                            >
                               <StatusIcon aria-hidden="true" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                               <span>Data unavailable</span>
                             </div>

@@ -15,6 +15,29 @@ and renders one responsive card per unique website.
 - Per-property daily trend charts with accessible tabular data.
 - Property-local reporting windows ending on the last completed day.
 
+## Visual semantics
+
+The dashboard is intentionally neutral by default. Raw current totals use the
+primary foreground; raw previous-period totals use a muted neutral. Current and
+previous chart series use solid white and dashed gray lines, respectively, and
+the accessible trend table follows the same neutral hierarchy.
+
+Green and red are reserved for changes that clear both a rate gate and a
+seven-day-normalized user-impact gate:
+
+- Positive: at least `+15%` and `+10` normalized users.
+- Negative: at most `-20%` and `-10` normalized users.
+- Critical: at most `-40%` and `-20` normalized users, or a drop to zero from
+  at least `10` normalized previous users.
+
+The normalized impact is `delta × 7 ÷ reporting-window days`, which keeps the
+materiality standard consistent across 1-, 7-, 28-, 90-, 180-, and 365-day
+views. Changes below those gates remain neutral even though the Growing and
+Declining filters still reflect their actual direction. The red priority signal
+renders only for a critical decline. Normal current/loading status is neutral;
+red is used for blocking connection failures and other issues that need action.
+A failed refresh remains muted when a last successful result is still available.
+
 ## Prereqs
 
 1. Create a Google Cloud project.
@@ -76,6 +99,9 @@ Open `http://localhost:3000`.
 2. Run `npm run lint`, `npx tsc --noEmit`, and `npm run build`.
 3. Push the verified commit to `main` and deploy or promote that exact commit.
 4. Read back `/api/dashboard?window=d7` and the rendered production dashboard.
+   Verify raw values and current/previous series remain neutral, gated changes
+   receive the correct semantic tone, and only critical declines render the red
+   priority signal.
 
 See [Production operations](docs/OPERATIONS.md) for the complete access,
 verification, and release checklist.

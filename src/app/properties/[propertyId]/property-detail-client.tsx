@@ -21,13 +21,12 @@ import {
 } from "lucide-react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { DashboardWindow, PropertyDetailResponse } from "@/lib/types";
+import { classifyTrend, type TrendTone } from "@/lib/trend";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
@@ -95,13 +94,20 @@ const updatedFormatter = new Intl.DateTimeFormat("en-US", {
 const chartConfig = {
   current: {
     label: "Current window",
-    color: "hsl(var(--chart-1))",
+    color: "hsl(var(--foreground))",
   },
   previous: {
     label: "Previous window",
-    color: "hsl(var(--chart-2))",
+    color: "hsl(var(--muted-foreground))",
   },
 } satisfies ChartConfig;
+
+const trendToneClass: Record<TrendTone, string> = {
+  neutral: "text-muted-foreground",
+  positive: "text-positive",
+  negative: "text-negative",
+  critical: "text-negative",
+};
 
 const formatDomain = (value: string) =>
   value.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -261,6 +267,10 @@ export default function PropertyDetailClient({
   const website = data?.property.defaultUri ?? null;
   const isInitialLoading = isLoading && !currentData;
   const friendlyError = error ? friendlyErrorMessage(error) : null;
+  const hasBlockingError = Boolean(error && !currentData);
+  const trendTone = summary
+    ? classifyTrend(summary, windowKey)
+    : "neutral";
 
   const deltaIcon =
     summary?.delta === undefined || summary.delta === 0 ? (
@@ -287,8 +297,9 @@ export default function PropertyDetailClient({
           ? numberFormatter.format(summary.current)
           : null,
       icon: <Users aria-hidden="true" />,
-      tone: "text-positive",
-      iconTone: "text-positive",
+      tone: "text-foreground",
+      iconTone: "text-muted-foreground",
+      testId: "stat-current",
       accessibleValue:
         summary?.current !== undefined
           ? numberFormatter.format(summary.current) + " new users"
@@ -303,8 +314,9 @@ export default function PropertyDetailClient({
           ? numberFormatter.format(summary.previous)
           : null,
       icon: <History aria-hidden="true" />,
-      tone: "text-negative",
-      iconTone: "text-negative",
+      tone: "text-muted-foreground",
+      iconTone: "text-muted-foreground",
+      testId: "stat-previous",
       accessibleValue:
         summary?.previous !== undefined
           ? numberFormatter.format(summary.previous) + " new users"
@@ -320,18 +332,12 @@ export default function PropertyDetailClient({
             numberFormatter.format(summary.delta)
           : null,
       icon: deltaIcon,
-      tone:
-        summary?.delta === undefined || summary.delta === 0
-          ? "text-foreground"
-          : summary.delta > 0
-            ? "text-positive"
-            : "text-negative",
+      tone: trendToneClass[trendTone],
       iconTone:
-        summary?.delta === undefined || summary.delta === 0
+        trendTone === "neutral"
           ? "text-muted-foreground"
-          : summary.delta > 0
-            ? "text-positive"
-            : "text-negative",
+          : trendToneClass[trendTone],
+      testId: "stat-delta",
       accessibleValue:
         summary?.delta !== undefined
           ? deltaDirection +
@@ -352,17 +358,16 @@ export default function PropertyDetailClient({
             : null,
       icon: <Activity aria-hidden="true" />,
       tone:
-        summary?.pct === undefined || summary.pct === null || summary.pct === 0
-          ? "text-foreground"
-          : summary.pct > 0
-            ? "text-positive"
-            : "text-negative",
-      iconTone:
-        summary?.pct === undefined || summary.pct === null || summary.pct === 0
+        summary?.pct === undefined || summary.pct === null
           ? "text-muted-foreground"
-          : summary.pct > 0
-            ? "text-positive"
-            : "text-negative",
+          : trendToneClass[trendTone],
+      iconTone:
+        summary?.pct === undefined ||
+        summary.pct === null ||
+        trendTone === "neutral"
+          ? "text-muted-foreground"
+          : trendToneClass[trendTone],
+      testId: "stat-rate",
       accessibleValue:
         summary?.pct !== undefined && summary.pct !== null
           ? deltaDirection + " of " + percentFormatter.format(Math.abs(summary.pct))
@@ -420,11 +425,13 @@ export default function PropertyDetailClient({
             <div
               className={
                 "flex min-h-10 items-center gap-2 rounded-lg border px-3 text-xs font-medium shadow-sm " +
-                (error
+                (hasBlockingError
                   ? "border-negative/30 bg-negative-muted text-negative-foreground"
-                  : isLoading
-                    ? "border-border bg-muted text-muted-foreground"
-                    : "border-positive/30 bg-positive-muted text-positive-foreground")
+                  : "border-border bg-muted text-muted-foreground")
+              }
+              data-testid="data-status"
+              data-error-severity={
+                hasBlockingError ? "blocking" : error ? "stale" : "none"
               }
               role="status"
               aria-live="polite"
@@ -519,9 +526,20 @@ export default function PropertyDetailClient({
         </header>
 
         {friendlyError ? (
-          <Alert className="rounded-xl border border-negative/30 bg-negative-muted py-4 text-negative-foreground shadow-card [&>svg]:text-negative">
+          <Alert
+            className={
+              "rounded-xl border py-4 shadow-card " +
+              (hasBlockingError
+                ? "border-negative/30 bg-negative-muted text-negative-foreground [&>svg]:text-negative"
+                : "border-border bg-muted text-muted-foreground [&>svg]:text-muted-foreground")
+            }
+            data-testid="property-error"
+            data-error-severity={hasBlockingError ? "blocking" : "stale"}
+          >
             <CircleAlert className="h-5 w-5" aria-hidden="true" />
-            <AlertTitle className="text-sm font-semibold text-negative-foreground">
+            <AlertTitle
+              className={`text-sm font-semibold ${hasBlockingError ? "text-negative-foreground" : "text-foreground"}`}
+            >
               Data connection needs attention
             </AlertTitle>
             <AlertDescription className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -583,6 +601,16 @@ export default function PropertyDetailClient({
                       stat.tone
                     }
                     aria-label={stat.accessibleValue}
+                    data-testid={stat.testId}
+                    data-trend-tone={
+                      stat.testId === "stat-delta"
+                        ? trendTone
+                        : stat.testId === "stat-rate" &&
+                            summary?.pct !== undefined &&
+                            summary.pct !== null
+                          ? trendTone
+                        : "neutral"
+                    }
                   >
                     {stat.value ??
                       (isInitialLoading ? (
@@ -602,7 +630,7 @@ export default function PropertyDetailClient({
             <div className="flex flex-col gap-3 border-b border-border-subtle p-4 sm:flex-row sm:items-end sm:justify-between sm:p-6">
               <div>
                 <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <Activity className="h-4 w-4 text-positive" aria-hidden="true" />
+                  <Activity className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   Daily comparison
                 </div>
                 <h2
@@ -612,9 +640,31 @@ export default function PropertyDetailClient({
                   New users trend
                 </h2>
               </div>
-              <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-                Current {windowMeta.label} against the aligned prior window.
-              </p>
+              <div className="flex flex-col gap-2 sm:items-end">
+                <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+                  Current {windowMeta.label} against the aligned prior window.
+                </p>
+                <div
+                  className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground"
+                  aria-label="Trend chart legend"
+                  data-testid="trend-legend"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="h-0 w-7 border-t-2 border-foreground"
+                      aria-hidden="true"
+                    />
+                    Current
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="h-0 w-7 border-t-2 border-dashed border-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    Previous
+                  </span>
+                </div>
+              </div>
             </div>
 
             <CardContent className="p-4 sm:p-6">
@@ -701,7 +751,6 @@ export default function PropertyDetailClient({
                             />
                           }
                         />
-                        <ChartLegend content={<ChartLegendContent />} />
                         <Line
                           type="monotone"
                           dataKey="current"
@@ -728,8 +777,11 @@ export default function PropertyDetailClient({
                       <span>View accessible trend data</span>
                       <ArrowDown className="h-4 w-4" aria-hidden="true" />
                     </summary>
-                    <div className="mt-4 overflow-hidden rounded-xl border border-border-subtle bg-background/40">
-                      <Table aria-describedby="trend-summary">
+                    <div className="mt-4 overflow-x-auto rounded-xl border border-border-subtle bg-background/40">
+                      <Table
+                        aria-describedby="trend-summary"
+                        className="min-w-[32rem]"
+                      >
                         <TableCaption className="px-3 pb-3 text-left text-xs text-muted-foreground">
                           Daily values for the selected window. Previous values
                           are aligned by day position.
@@ -744,13 +796,15 @@ export default function PropertyDetailClient({
                             </TableHead>
                             <TableHead
                               scope="col"
-                              className="h-12 px-3 text-right text-xs font-medium text-positive"
+                              className="h-12 px-3 text-right text-xs font-medium text-foreground"
+                              data-testid="trend-current-heading"
                             >
                               Current
                             </TableHead>
                             <TableHead
                               scope="col"
-                              className="h-12 px-3 text-right text-xs font-medium text-negative"
+                              className="h-12 px-3 text-right text-xs font-medium text-muted-foreground"
+                              data-testid="trend-previous-heading"
                             >
                               Previous
                             </TableHead>
@@ -767,10 +821,16 @@ export default function PropertyDetailClient({
                                   {formatShortDate(point.date)}
                                 </time>
                               </TableCell>
-                              <TableCell className="px-3 py-3 text-right font-mono font-semibold text-positive">
+                              <TableCell
+                                className="px-3 py-3 text-right font-mono font-semibold text-foreground"
+                                data-testid="trend-current-value"
+                              >
                                 {numberFormatter.format(point.current)}
                               </TableCell>
-                              <TableCell className="px-3 py-3 text-right font-mono text-negative">
+                              <TableCell
+                                className="px-3 py-3 text-right font-mono text-muted-foreground"
+                                data-testid="trend-previous-value"
+                              >
                                 {numberFormatter.format(point.previous)}
                               </TableCell>
                             </TableRow>

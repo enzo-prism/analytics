@@ -43,3 +43,110 @@ test("mobile property detail shows stats and chart", async ({ page }) => {
     .boundingBox();
   expect(chartBox?.height ?? 0).toBeGreaterThan(0);
 });
+
+test("property detail uses neutral raw values and semantic change tones", async ({
+  page,
+}) => {
+  await page.route("**/api/properties/123?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(propertyFixture),
+    });
+  });
+
+  await page.goto("/properties/123?window=d7");
+
+  await expect(page.getByTestId("stat-current")).toHaveClass(/text-foreground/);
+  await expect(page.getByTestId("stat-current")).not.toHaveClass(/text-positive/);
+  await expect(page.getByTestId("stat-previous")).toHaveClass(
+    /text-muted-foreground/,
+  );
+  await expect(page.getByTestId("stat-previous")).not.toHaveClass(/text-negative/);
+  await expect(page.getByTestId("stat-delta")).toHaveClass(/text-positive/);
+  await expect(page.getByTestId("stat-rate")).toHaveClass(/text-positive/);
+  await expect(page.getByTestId("data-status")).toHaveClass(
+    /text-muted-foreground/,
+  );
+  await expect(page.getByTestId("data-status")).not.toHaveClass(/text-positive/);
+
+  const legend = page.getByTestId("trend-legend");
+  await expect(legend).toBeVisible();
+  await expect(legend.locator(".border-foreground")).toHaveCount(1);
+  await expect(legend.locator(".border-dashed")).toHaveCount(1);
+
+  await page.getByText("View accessible trend data").click();
+  await expect(page.getByTestId("trend-current-heading")).toHaveClass(
+    /text-foreground/,
+  );
+  await expect(page.getByTestId("trend-previous-heading")).toHaveClass(
+    /text-muted-foreground/,
+  );
+  await expect(page.getByTestId("trend-current-value").first()).toHaveClass(
+    /text-foreground/,
+  );
+  await expect(page.getByTestId("trend-previous-value").first()).toHaveClass(
+    /text-muted-foreground/,
+  );
+
+  const chartLines = page.locator(".recharts-line-curve");
+  await expect(chartLines).toHaveCount(2);
+  await expect(chartLines.nth(0)).not.toHaveAttribute("stroke-dasharray");
+  await expect(chartLines.nth(1)).toHaveAttribute("stroke-dasharray", "5 7");
+});
+
+test("negative detail changes and blocking errors use red", async ({ page }) => {
+  await page.route("**/api/properties/123?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...propertyFixture,
+        summary: { current: 43, previous: 100, delta: -57, pct: -0.57 },
+      }),
+    });
+  });
+
+  await page.goto("/properties/123?window=d7");
+  await expect(page.getByTestId("stat-delta")).toHaveClass(/text-negative/);
+  await expect(page.getByTestId("stat-rate")).toHaveClass(/text-negative/);
+
+  await page.unroute("**/api/properties/123?**");
+  await page.route("**/api/properties/404?**", async (route) => {
+    await route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "403 forbidden" }),
+    });
+  });
+  await page.goto("/properties/404?window=d7");
+  await expect(page.getByTestId("data-status")).toHaveAttribute(
+    "data-error-severity",
+    "blocking",
+  );
+  await expect(page.getByTestId("data-status")).toHaveClass(/text-negative/);
+  await expect(page.getByTestId("property-error")).toHaveClass(/text-negative/);
+});
+
+test("unavailable percentage stays muted", async ({ page }) => {
+  await page.route("**/api/properties/123?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...propertyFixture,
+        summary: { current: 20, previous: 0, delta: 20, pct: null },
+      }),
+    });
+  });
+
+  await page.goto("/properties/123?window=d7");
+  await expect(page.getByTestId("stat-rate")).toHaveText("n/a");
+  await expect(page.getByTestId("stat-rate")).toHaveClass(
+    /text-muted-foreground/,
+  );
+  await expect(page.getByTestId("stat-rate")).toHaveAttribute(
+    "data-trend-tone",
+    "neutral",
+  );
+});

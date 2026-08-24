@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { classifyTrend } from "../src/lib/trend";
 
 const dashboardFixture = {
   updatedAt: "2026-01-07T00:00:00Z",
@@ -45,6 +46,105 @@ const dashboardFixture = {
 };
 
 test.use({ viewport: { width: 390, height: 844 } });
+
+test("trend tones use normalized rate and impact gates", () => {
+  const windowDays = {
+    d1: 1,
+    d7: 7,
+    d28: 28,
+    d90: 90,
+    d180: 180,
+    d365: 365,
+  } as const;
+
+  for (const [windowKey, days] of Object.entries(windowDays)) {
+    const scale = days / 7;
+    const previous = 100 * scale;
+
+    expect(
+      classifyTrend(
+        {
+          current: previous + 10 * scale,
+          previous,
+          delta: 10 * scale,
+          pct: 0.15,
+        },
+        windowKey as keyof typeof windowDays,
+      ),
+    ).toBe("positive");
+    expect(
+      classifyTrend(
+        {
+          current: previous - 10 * scale,
+          previous,
+          delta: -10 * scale,
+          pct: -0.2,
+        },
+        windowKey as keyof typeof windowDays,
+      ),
+    ).toBe("negative");
+    expect(
+      classifyTrend(
+        {
+          current: previous - 20 * scale,
+          previous,
+          delta: -20 * scale,
+          pct: -0.4,
+        },
+        windowKey as keyof typeof windowDays,
+      ),
+    ).toBe("critical");
+  }
+
+  expect(
+    classifyTrend(
+      { current: 110, previous: 100, delta: 10, pct: 0.15 },
+      "d7",
+    ),
+  ).toBe("positive");
+  expect(
+    classifyTrend(
+      { current: 109, previous: 100, delta: 9, pct: 0.2 },
+      "d7",
+    ),
+  ).toBe("neutral");
+  expect(
+    classifyTrend(
+      { current: 90, previous: 100, delta: -10, pct: -0.2 },
+      "d7",
+    ),
+  ).toBe("negative");
+  expect(
+    classifyTrend(
+      { current: 80, previous: 100, delta: -20, pct: -0.4 },
+      "d7",
+    ),
+  ).toBe("critical");
+  expect(
+    classifyTrend(
+      { current: 0, previous: 10, delta: -10, pct: null },
+      "d7",
+    ),
+  ).toBe("critical");
+  expect(
+    classifyTrend(
+      { current: 0, previous: 9, delta: -9, pct: null },
+      "d7",
+    ),
+  ).toBe("neutral");
+  expect(
+    classifyTrend(
+      { current: 360, previous: 400, delta: -40, pct: -0.2 },
+      "d28",
+    ),
+  ).toBe("negative");
+  expect(
+    classifyTrend(
+      { current: 320, previous: 400, delta: -80, pct: -0.4 },
+      "d28",
+    ),
+  ).toBe("critical");
+});
 
 test("mobile dashboard uses card layout without horizontal scroll", async ({
   page,
@@ -156,6 +256,118 @@ test("property cards keep only the essential analytics content", async ({
   await expect(firstCard.getByText("www.olympicbootworks.com")).toHaveCount(0);
   await expect(firstCard.getByText("View", { exact: true })).toHaveCount(0);
   await expect(firstCard.getByText("Growing", { exact: true })).toHaveCount(0);
+});
+
+test("dashboard reserves semantic color for material changes", async ({
+  page,
+}) => {
+  await page.route("**/api/dashboard?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(dashboardFixture),
+    });
+  });
+
+  await page.goto("/");
+
+  const neutralChange = page
+    .getByRole("link", { name: "Open Olympic Bootworks Website analytics" })
+    .getByTestId("property-change");
+  const positiveChange = page
+    .getByRole("link", { name: "Open Prism analytics" })
+    .getByTestId("property-change");
+  const criticalChange = page
+    .getByRole("link", { name: "Open Canary Cove analytics" })
+    .getByTestId("property-change");
+
+  await expect(neutralChange).toHaveAttribute("data-trend-tone", "neutral");
+  await expect(neutralChange).toHaveClass(/text-muted-foreground/);
+  await expect(positiveChange).toHaveAttribute("data-trend-tone", "positive");
+  await expect(positiveChange).toHaveClass(/text-positive/);
+  await expect(criticalChange).toHaveAttribute("data-trend-tone", "critical");
+  await expect(criticalChange).toHaveClass(/text-negative/);
+
+  for (const currentValue of ["909", "263", "43"]) {
+    await expect(page.getByText(currentValue, { exact: true })).toHaveClass(
+      /text-foreground/,
+    );
+  }
+});
+
+test("priority signal renders only for a critical decline", async ({ page }) => {
+  const materialButNotCritical = {
+    ...dashboardFixture,
+    properties: [
+      {
+        ...dashboardFixture.properties[0],
+        propertyId: "moderate",
+        displayName: "Moderate decline",
+        newUsers: { current: 80, previous: 100, delta: -20, pct: -0.2 },
+      },
+    ],
+  };
+
+  await page.route("**/api/dashboard?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(materialButNotCritical),
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("Priority signal", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("property-change")).toHaveAttribute(
+    "data-trend-tone",
+    "negative",
+  );
+});
+
+test("dashboard connection failure uses the negative attention color", async ({
+  page,
+}) => {
+  await page.route("**/api/dashboard?**", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Unavailable" }),
+    });
+  });
+
+  await page.goto("/");
+  const blockingError = page.getByTestId("dashboard-error");
+  await expect(blockingError).toHaveClass(/text-negative/);
+  await expect(blockingError).toContainText(
+    "No analytics values are available yet.",
+  );
+});
+
+test("dashboard refresh failure stays neutral when prior data remains", async ({
+  page,
+}) => {
+  let failRequests = false;
+  await page.route("**/api/dashboard?**", async (route) => {
+    await route.fulfill({
+      status: failRequests ? 503 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        failRequests ? { error: "Unavailable" } : dashboardFixture,
+      ),
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("909", { exact: true })).toBeVisible();
+  failRequests = true;
+  await page.getByRole("button", { name: "Refresh analytics data" }).click();
+
+  const staleError = page.getByTestId("dashboard-error");
+  await expect(staleError).toHaveAttribute("data-error-severity", "stale");
+  await expect(staleError).toHaveClass(/text-muted-foreground/);
+  await expect(staleError).not.toHaveClass(/text-negative/);
+  await expect(staleError).toContainText("Existing values remain visible.");
+  await expect(page.getByText("909", { exact: true })).toBeVisible();
 });
 
 test("dashboard keeps only reporting and status controls", async ({ page }) => {
