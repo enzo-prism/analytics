@@ -63,18 +63,29 @@ GA_PROPERTY_BLOCKLIST=
 Notes:
 - `GA_PRIVATE_KEY` should include escaped newlines (`\n`) if stored in a single line.
 - `GA_PROPERTY_ALLOWLIST` is optional (comma-separated property IDs).
-- `GA_PROPERTY_BLOCKLIST` is optional (comma-separated property IDs to hide).
-  There are no source-code exclusions; production exclusions must be explicit in
-  this variable.
+- `GA_PROPERTY_BLOCKLIST` is optional (comma-separated property IDs to hide in
+  addition to the permanent exclusions below).
 - Leave `GA_PROPERTY_ALLOWLIST` unset to discover every property visible to the
   service account.
+
+### Permanent property exclusions
+
+The source-managed `HIDDEN_PROPERTY_IDS` set is applied before dashboard totals,
+cards, or detail responses are created. It currently excludes:
+
+- `518332323` — Saorsa Website
+
+This removes the property from the web app without deleting or modifying the
+underlying Google Analytics property. Use `GA_PROPERTY_BLOCKLIST` for temporary
+or deployment-specific exclusions.
 
 ## Property discovery
 
 The dashboard reads all GA4 account summaries visible to the service account,
 then keeps properties that:
 
-1. Are not excluded by the allowlist/blocklist configuration.
+1. Are not excluded by the source-managed hidden-property set or the environment
+   allowlist/blocklist configuration.
 2. Have a web data stream with a default website URL.
 3. Are queried for a `newUsers` report through the GA Data API. Permanent report
    failures remain visible as data issues instead of removing the property.
@@ -134,8 +145,8 @@ bounded retries with per-request timeouts.
 
 - Permission errors: confirm the service account is a Viewer at the GA account level.
 - Missing properties: compare the work-user and service-account inventories, check
-  `GA_PROPERTY_ALLOWLIST`/`GA_PROPERTY_BLOCKLIST`, and confirm the property has a web
-  data stream with a default URL.
+  `HIDDEN_PROPERTY_IDS`, `GA_PROPERTY_ALLOWLIST`, and `GA_PROPERTY_BLOCKLIST`, then
+  confirm the property has a web data stream with a default URL.
 - Missing duplicate: a newer property with the same normalized domain may have
   replaced the older property intentionally.
 - Private key issues: ensure `GA_PRIVATE_KEY` uses `\n` for newlines in Vercel.

@@ -25,17 +25,35 @@ visible to a human Google account does not make it visible to the dashboard.
    unavailable.
 2. Confirm the property has a `WEB_DATA_STREAM` with a populated default URL.
 3. If `GA_PROPERTY_ALLOWLIST` is configured, append the numeric property ID.
-4. Confirm the ID is not present in `GA_PROPERTY_BLOCKLIST`.
+4. Confirm the ID is not present in the source-managed `HIDDEN_PROPERTY_IDS` set
+   or `GA_PROPERTY_BLOCKLIST`.
 5. Refresh `/api/dashboard?window=d7`. No source edit is required for discovery.
 
 Viewer is the intended least-privilege role. Email notifications are unnecessary
 for service accounts. Never commit or print the service-account private key.
 
+## Remove a property from the web app
+
+Use the source-managed `HIDDEN_PROPERTY_IDS` set for a permanent product decision.
+Use `GA_PROPERTY_BLOCKLIST` for a temporary or deployment-specific exclusion.
+Both mechanisms remove the property from dashboard cards and totals, and direct
+detail requests return `Property is excluded from the dashboard.` Neither
+mechanism deletes or modifies the underlying Google Analytics property.
+
+The permanent exclusion registry currently contains:
+
+- `518332323` — Saorsa Website
+
+When changing the registry, add or update a regression test, run the local
+verification suite, and read back both `/api/dashboard?window=d7` and the direct
+property endpoint in production.
+
 ## Why an accessible property may not render
 
 - The production service account does not have access.
 - The property has no web stream or the web stream has no default URL.
-- The property is excluded by an environment allowlist or blocklist.
+- The property is excluded by `HIDDEN_PROPERTY_IDS` or an environment allowlist
+  or blocklist.
 - A newer property uses the same normalized domain and supersedes it.
 - Google returned a permanent property-level API error.
 
