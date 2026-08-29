@@ -18,6 +18,13 @@ The user story is:
 The production service account is the authorization boundary. A property being
 visible to a human Google account does not make it visible to the dashboard.
 
+The default 7-day response is server-rendered from the application data cache.
+Validated dashboard windows and property IDs are the cache keys, so unrelated
+query parameters cannot trigger another full Google refresh. Account summaries
+are cached for 15 minutes, property metadata for 60 minutes, and report results
+for 60 seconds. CDN responses may remain available during background
+revalidation for up to 24 hours.
+
 ## Add a property
 
 1. In Google Analytics, grant the production service account **Viewer** access at
@@ -64,6 +71,7 @@ npm ci
 npm run lint
 npx tsc --noEmit
 npm run build
+npm run test:e2e
 ```
 
 Exercise the dashboard at desktop, tablet, and mobile widths. Confirm the visible
@@ -121,6 +129,12 @@ it scrolls horizontally inside its own container without widening the page.
    threshold. Confirm raw totals never inherit trend colors, the chart legend
    matches the solid/dashed series, normal status stays neutral, and only a
    critical decline produces the red priority banner.
+10. Inspect a fresh production load and confirm the overview does not prefetch
+    every `/properties/*?_rsc=` route. Change a detail reporting window and
+    confirm it issues one property API request without an RSC navigation.
+11. Compare a canonical API request with the same validated `window` plus a
+    harmless extra query parameter. The outer CDN may miss, but the normalized
+    application cache should prevent another multi-property Google fan-out.
 
 Keep Git state, build state, deployment state, and live data readback distinct in
 release notes.

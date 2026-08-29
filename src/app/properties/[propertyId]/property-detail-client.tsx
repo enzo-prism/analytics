@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   Activity,
   ArrowDown,
@@ -19,18 +20,11 @@ import {
   RefreshCw,
   Users,
 } from "lucide-react";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { DashboardWindow, PropertyDetailResponse } from "@/lib/types";
 import { classifyTrend, type TrendTone } from "@/lib/trend";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -72,6 +66,14 @@ const WINDOW_VALUES: DashboardWindow[] = [
   "d365",
 ];
 
+const DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const PropertyTrendChart = dynamic(() => import("./property-trend-chart"), {
+  ssr: false,
+  loading: () => (
+    <Skeleton className="h-[260px] w-full rounded-xl sm:h-[360px]" />
+  ),
+});
+
 const numberFormatter = new Intl.NumberFormat("en-US");
 const percentFormatter = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -91,17 +93,6 @@ const updatedFormatter = new Intl.DateTimeFormat("en-US", {
   timeZoneName: "short",
 });
 
-const chartConfig = {
-  current: {
-    label: "Current window",
-    color: "hsl(var(--foreground))",
-  },
-  previous: {
-    label: "Previous window",
-    color: "hsl(var(--muted-foreground))",
-  },
-} satisfies ChartConfig;
-
 const trendToneClass: Record<TrendTone, string> = {
   neutral: "text-muted-foreground",
   positive: "text-positive",
@@ -115,10 +106,7 @@ const formatDomain = (value: string) =>
 const formatShortDate = (value: string) => {
   if (!value) return value;
   const date = new Date(value + "T00:00:00Z");
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return dateFormatter.format(date);
+  return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
 };
 
 const friendlyErrorMessage = (message: string) => {
@@ -154,7 +142,6 @@ type PropertyDetailClientProps = {
 export default function PropertyDetailClient({
   propertyId,
 }: PropertyDetailClientProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const initialWindow = useMemo(() => {
     const value = searchParams.get("window") ?? "d7";
@@ -237,9 +224,14 @@ export default function PropertyDetailClient({
     if (currentParam !== windowKey) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("window", windowKey);
-      router.replace("?" + params.toString(), { scroll: false });
+      window.History.prototype.replaceState.call(
+        window.history,
+        window.history.state,
+        "",
+        "?" + params.toString(),
+      );
     }
-  }, [router, searchParams, windowKey]);
+  }, [searchParams, windowKey]);
 
   useEffect(() => {
     void loadProperty(windowKey);
@@ -247,8 +239,10 @@ export default function PropertyDetailClient({
 
   useEffect(() => {
     const interval = setInterval(() => {
-      void loadProperty(windowKey);
-    }, 60000);
+      if (document.visibilityState === "visible") {
+        void loadProperty(windowKey);
+      }
+    }, DATA_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [loadProperty, windowKey]);
 
@@ -416,7 +410,11 @@ export default function PropertyDetailClient({
               asChild
               className="h-10 rounded-lg border-border bg-secondary/60 px-3 text-sm text-secondary-foreground shadow-sm hover:border-primary/50 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              <Link href="/" aria-label="Back to website traffic dashboard">
+              <Link
+                href="/"
+                prefetch={false}
+                aria-label="Back to website traffic dashboard"
+              >
                 <ArrowLeft aria-hidden="true" />
                 All properties
               </Link>
@@ -696,81 +694,7 @@ export default function PropertyDetailClient({
                 </div>
               ) : (
                 <>
-                  <div
-                    className="rounded-xl border border-border-subtle bg-background/40 p-2 shadow-inner sm:p-4"
-                    aria-hidden="true"
-                  >
-                    <ChartContainer
-                      config={chartConfig}
-                      className="h-[260px] w-full sm:h-[360px]"
-                      data-testid="property-trend-chart"
-                    >
-                      <LineChart
-                        data={series}
-                        margin={{ left: 0, right: 16, top: 12 }}
-                        accessibilityLayer={false}
-                      >
-                        <CartesianGrid
-                          vertical={false}
-                          stroke="hsl(var(--border-subtle))"
-                          strokeDasharray="3 6"
-                        />
-                        <XAxis
-                          dataKey="date"
-                          tickFormatter={formatShortDate}
-                          axisLine={{ stroke: "hsl(var(--border))" }}
-                          tickLine={false}
-                          minTickGap={22}
-                          tickMargin={12}
-                          tick={{
-                            fill: "hsl(var(--muted-foreground))",
-                            fontFamily: "var(--font-mono)",
-                          }}
-                        />
-                        <YAxis
-                          tickFormatter={(value) =>
-                            numberFormatter.format(value)
-                          }
-                          axisLine={false}
-                          tickLine={false}
-                          width={48}
-                          tick={{
-                            fill: "hsl(var(--muted-foreground))",
-                            fontFamily: "var(--font-mono)",
-                          }}
-                        />
-                        <ChartTooltip
-                          cursor={{
-                            stroke: "hsl(var(--border))",
-                            strokeDasharray: "3 5",
-                          }}
-                          content={
-                            <ChartTooltipContent
-                              indicator="line"
-                              className="rounded-xl border-border bg-popover text-popover-foreground shadow-popover"
-                            />
-                          }
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="current"
-                          stroke="var(--color-current)"
-                          strokeWidth={2.75}
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="previous"
-                          stroke="var(--color-previous)"
-                          strokeWidth={2.25}
-                          strokeDasharray="5 7"
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                      </LineChart>
-                    </ChartContainer>
-                  </div>
+                  <PropertyTrendChart series={series} />
 
                   <details className="mt-4 border-t border-border-subtle pt-4">
                     <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">

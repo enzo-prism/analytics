@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getPropertyDetail } from "@/lib/ga";
+import { getCachedPropertyDetail } from "@/lib/ga";
 import type { DashboardWindow } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -33,11 +33,11 @@ export async function GET(
     );
   }
 
-  const data = await getPropertyDetail(propertyId, windowKey);
+  const data = await getCachedPropertyDetail(propertyId, windowKey);
 
   return NextResponse.json(data, {
     headers: {
-      "Cache-Control": "s-maxage=60, stale-while-revalidate=300",
+      "Cache-Control": "s-maxage=60, stale-while-revalidate=86400",
     },
   });
 }

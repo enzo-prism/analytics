@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDashboardData } from "@/lib/ga";
+import { getCachedDashboardData } from "@/lib/ga";
 import type { DashboardWindow } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -22,10 +22,10 @@ export async function GET(request: Request) {
     : "d7";
 
   try {
-    const data = await getDashboardData(windowKey);
+    const data = await getCachedDashboardData(windowKey);
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": "s-maxage=60, stale-while-revalidate=300",
+        "Cache-Control": "s-maxage=60, stale-while-revalidate=86400",
       },
     });
   } catch (error) {

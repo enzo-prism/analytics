@@ -141,6 +141,21 @@ the dashboard and total endpoints consistently use the newest property ID.
 Transient Google API throttling, server errors, and network stalls use short,
 bounded retries with per-request timeouts.
 
+## Loading and cache behavior
+
+- The default 7-day dashboard is rendered with cached data in the initial HTML,
+  so the browser does not wait for hydration before showing property cards.
+- Dashboard, total, and property-detail results are cached by their validated
+  window/property inputs for 60 seconds. Ignored query parameters do not create
+  another full Google Analytics refresh.
+- The slow-changing property inventory is shared across report windows: account
+  summaries are cached for 15 minutes and property metadata for 60 minutes.
+- Edge responses can serve cached data while revalidating for up to 24 hours.
+  Client views preserve existing values when a background refresh fails.
+- Automatic refresh runs every five minutes only while the tab is visible.
+  Property-route prefetching is disabled, and the detail chart loads separately
+  from the client code that starts the data request.
+
 ## Troubleshooting
 
 - Permission errors: confirm the service account is a Viewer at the GA account level.

@@ -1,4 +1,5 @@
 import { JWT } from "google-auth-library";
+import { unstable_cache } from "next/cache";
 import type {
   DashboardProperty,
   DashboardResponse,
@@ -13,6 +14,7 @@ import type {
 const ADMIN_BASE = "https://analyticsadmin.googleapis.com/v1beta";
 const DATA_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const SCOPES = ["https://www.googleapis.com/auth/analytics.readonly"];
+let authClient: JWT | null = null;
 const WINDOW_DAYS: Record<DashboardWindow, number> = {
   d1: 1,
   d7: 7,
@@ -451,12 +453,14 @@ const getAccessToken = async (): Promise<string> => {
     );
   }
   const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
-  const client = new JWT({
+  authClient ??= new JWT({
     email: clientEmail,
     key: privateKey,
     scopes: SCOPES,
   });
-  const { access_token: accessToken } = await client.authorize();
+  const tokenResponse = await authClient.getAccessToken();
+  const accessToken =
+    typeof tokenResponse === "string" ? tokenResponse : tokenResponse.token;
   if (!accessToken) {
     throw new Error("Unable to authorize the Google Analytics service account.");
   }
@@ -593,11 +597,13 @@ const getPropertyMetadata = async (
   token: string,
   propertyId: string,
 ): Promise<PropertyDetailResponse["property"] & { timeZone: string }> => {
-  const property = await fetchJson<PropertyResponse>(
-    `${ADMIN_BASE}/properties/${propertyId}`,
-    token,
-  );
-  const streams = await listDataStreams(token, propertyId);
+  const [property, streams] = await Promise.all([
+    fetchJson<PropertyResponse>(
+      `${ADMIN_BASE}/properties/${propertyId}`,
+      token,
+    ),
+    listDataStreams(token, propertyId),
+  ]);
   const webStream = pickWebStream(streams);
   return {
     propertyId,
@@ -610,6 +616,24 @@ const getPropertyMetadata = async (
     timeZone: property.timeZone ?? "UTC",
   };
 };
+
+const readCachedPropertySummaries = unstable_cache(
+  async () => {
+    const token = await getAccessToken();
+    return listPropertySummaries(token);
+  },
+  ["ga-property-summaries-v1"],
+  { revalidate: 15 * 60 },
+);
+
+const readCachedPropertyMetadata = unstable_cache(
+  async (propertyId: string) => {
+    const token = await getAccessToken();
+    return getPropertyMetadata(token, propertyId);
+  },
+  ["ga-property-metadata-v1"],
+  { revalidate: 60 * 60 },
+);
 
 const fetchNewUsers = async (
   token: string,
@@ -803,7 +827,7 @@ export const getDashboardData = async (
   const allowlist = getAllowlist();
   const blocklist = getBlocklist();
 
-  const summaries = await listPropertySummaries(token);
+  const summaries = await readCachedPropertySummaries();
   let filteredSummaries = allowlist
     ? summaries.filter((summary) => allowlist.has(summary.propertyId))
     : summaries;
@@ -816,7 +840,7 @@ export const getDashboardData = async (
     5,
     async (summary): Promise<StreamResult | null> => {
       try {
-        const metadata = await getPropertyMetadata(token, summary.propertyId);
+        const metadata = await readCachedPropertyMetadata(summary.propertyId);
         if (!metadata.defaultUri) {
           return null;
         }
@@ -952,7 +976,7 @@ export const getTotalNewUsers = async (
   const allowlist = getAllowlist();
   const blocklist = getBlocklist();
 
-  const summaries = await listPropertySummaries(token);
+  const summaries = await readCachedPropertySummaries();
   let filteredSummaries = allowlist
     ? summaries.filter((summary) => allowlist.has(summary.propertyId))
     : summaries;
@@ -965,7 +989,7 @@ export const getTotalNewUsers = async (
     5,
     async (summary): Promise<StreamResult | null> => {
       try {
-        const metadata = await getPropertyMetadata(token, summary.propertyId);
+        const metadata = await readCachedPropertyMetadata(summary.propertyId);
         if (!metadata.defaultUri) {
           return null;
         }
@@ -1084,7 +1108,7 @@ export const getPropertyDetail = async (
 
   let emojiMap = new Map<string, string>();
   try {
-    const summaries = await listPropertySummaries(token);
+    const summaries = await readCachedPropertySummaries();
     const filteredSummaries = allowlist
       ? summaries.filter((summary) => allowlist.has(summary.propertyId))
       : summaries;
@@ -1104,7 +1128,7 @@ export const getPropertyDetail = async (
   let property = { ...fallbackProperty, emoji };
   let propertyTimeZone = "UTC";
   try {
-    const metadata = await getPropertyMetadata(token, propertyId);
+    const metadata = await readCachedPropertyMetadata(propertyId);
     propertyTimeZone = metadata.timeZone;
     property = {
       propertyId: metadata.propertyId,
@@ -1163,3 +1187,33 @@ export const getPropertyDetail = async (
     };
   }
 };
+
+const readCachedDashboardData = unstable_cache(
+  async (windowKey: DashboardWindow) => getDashboardData(windowKey),
+  ["ga-dashboard-data-v1"],
+  { revalidate: 60 },
+);
+
+const readCachedTotalNewUsers = unstable_cache(
+  async (windowKey: TotalWindow) => getTotalNewUsers(windowKey),
+  ["ga-total-data-v1"],
+  { revalidate: 60 },
+);
+
+const readCachedPropertyDetail = unstable_cache(
+  async (propertyId: string, windowKey: DashboardWindow) =>
+    getPropertyDetail(propertyId, windowKey),
+  ["ga-property-detail-v1"],
+  { revalidate: 60 },
+);
+
+export const getCachedDashboardData = (windowKey: DashboardWindow) =>
+  readCachedDashboardData(windowKey);
+
+export const getCachedTotalNewUsers = (windowKey: TotalWindow) =>
+  readCachedTotalNewUsers(windowKey);
+
+export const getCachedPropertyDetail = (
+  propertyId: string,
+  windowKey: DashboardWindow,
+) => readCachedPropertyDetail(propertyId, windowKey);
