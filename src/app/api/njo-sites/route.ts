@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getCachedNjoSitesReport,
+  getNjoSitesReport,
   isNjoPeriodId,
   type NjoPeriodId,
 } from "@/lib/njo-sites";
@@ -25,7 +26,7 @@ const isAllowedOrigin = (origin: string | null): origin is string => {
   );
 };
 
-const corsHeaders = (origin: string | null): HeadersInit => {
+const corsHeaders = (origin: string | null): Record<string, string> => {
   const headers: Record<string, string> = {
     "Cache-Control": "s-maxage=60, stale-while-revalidate=86400",
     Vary: "Origin",
@@ -54,8 +55,15 @@ export async function GET(request: Request) {
     : "last30";
 
   try {
-    const data = await getCachedNjoSitesReport(periodId);
-    return NextResponse.json(data, { headers: corsHeaders(origin) });
+    const data =
+      searchParams.get("refresh") === "1"
+        ? await getNjoSitesReport(periodId)
+        : await getCachedNjoSitesReport(periodId);
+    const headers = corsHeaders(origin);
+    if (searchParams.get("refresh") === "1") {
+      headers["Cache-Control"] = "no-store";
+    }
+    return NextResponse.json(data, { headers });
   } catch (error) {
     const message =
       error instanceof Error && error.message
