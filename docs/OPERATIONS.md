@@ -22,9 +22,11 @@ GA4 and Search Console for PTI and michaelnjodds.com from:
 
 That route uses the same service account. Grant the service account **Viewer**
 on both GA4 properties and **Full** (or at least Restricted) user access on both
-Search Console domain properties (`sc-domain:michaelnjodds.com` and
-`sc-domain:practicetransitionsinstitute.com`). If Search Console is missing,
-GA4 still returns; GSC metrics show as Pending instead of fake zeros.
+Search Console properties for those domains (domain property or URL-prefix).
+The Njo endpoint lists Search Console sites the service account can see and
+uses the matching property for each domain, so either `sc-domain:` or
+`https://www.example.com/` works once the account is added. If Search Console
+is missing, GA4 still returns; GSC metrics show as Pending instead of fake zeros.
 
 The production service account is the authorization boundary. A property being
 visible to a human Google account does not make it visible to the dashboard.
