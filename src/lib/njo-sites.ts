@@ -189,6 +189,22 @@ const getPrivateKey = (): { email: string; key: string } => {
   return { email, key: privateKeyRaw.replace(/\\n/g, "\n") };
 };
 
+const publicGoogleError = (
+  error: string | null,
+  kind: "ga4" | "gsc",
+): string | null => {
+  if (!error) return null;
+  if (kind === "gsc" && /sufficient permission|403/.test(error)) {
+    return "Service account is not a Search Console user on this property yet.";
+  }
+  if (/429/.test(error)) {
+    return "Google is rate-limiting this report. Try again shortly.";
+  }
+  return kind === "gsc"
+    ? "Search Console is temporarily unavailable."
+    : "GA4 is temporarily unavailable.";
+};
+
 const getGaToken = async (): Promise<string> => {
   const { email, key } = getPrivateKey();
   gaAuthClient ??= new JWT({ email, key, scopes: [GA_SCOPE] });
@@ -479,18 +495,21 @@ const fetchSiteSnapshot = async (
       })(),
     ]);
 
-  const gaError =
+  const gaErrorRaw =
     gaDailyResult.status === "rejected"
       ? gaDailyResult.reason instanceof Error
         ? gaDailyResult.reason.message
         : String(gaDailyResult.reason)
       : null;
-  const gscError =
+  const gscErrorRaw =
     gscResult.status === "rejected"
       ? gscResult.reason instanceof Error
         ? gscResult.reason.message
         : String(gscResult.reason)
       : null;
+  const gaError = publicGoogleError(gaErrorRaw, "ga4");
+  const gscError = publicGoogleError(gscErrorRaw, "gsc");
+  const serviceAccountEmail = getPrivateKey().email;
 
   const gaDaily =
     gaDailyResult.status === "fulfilled" ? gaDailyResult.value.rows : [];
@@ -651,7 +670,7 @@ const fetchSiteSnapshot = async (
         value: site.gscSiteUrl,
         detail: gscAvailable
           ? "Live Search Console searchAnalytics rows."
-          : (gscError ?? "Search Console unavailable for this service account."),
+          : `${gscError ?? "Search Console unavailable."} Add ${serviceAccountEmail} as a user on this Search Console property.`,
       },
       {
         label: "Checked",
@@ -676,6 +695,16 @@ const fetchSiteSnapshot = async (
             : "Pending",
         detail: "Earliest nonzero Search Console row in this window.",
       },
+      ...(!gscAvailable
+        ? [
+            {
+              label: "GSC user to add",
+              value: serviceAccountEmail,
+              detail:
+                "Add this service account as a user on both Search Console domain properties, then Search Console metrics fill in automatically.",
+            },
+          ]
+        : []),
     ],
     sources: {
       ga4: gaAvailable ? "connected" : "unavailable",
@@ -737,7 +766,7 @@ export const getNjoSitesReport = async (periodId: NjoPeriodId) => {
 
 const readCachedNjoSitesReport = unstable_cache(
   async (periodId: NjoPeriodId) => getNjoSitesReport(periodId),
-  ["njo-sites-report-v1"],
+  ["njo-sites-report-v2"],
   { revalidate: 60 },
 );
 
