@@ -3,8 +3,11 @@ import { unstable_cache } from "next/cache";
 
 const DATA_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const GSC_BASE = "https://searchconsole.googleapis.com/webmasters/v3";
+const SITE_VERIFY_BASE = "https://www.googleapis.com/siteVerification/v1";
 const GA_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
-const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
+const GSC_READ_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
+const GSC_WRITE_SCOPE = "https://www.googleapis.com/auth/webmasters";
+const SITE_VERIFY_SCOPE = "https://www.googleapis.com/auth/siteverification";
 const REQUEST_TIMEOUT_MS = 25_000;
 const HISTORICAL_FLOOR = "2024-01-01";
 const DAILY_ROW_LIMIT = 5000;
@@ -33,6 +36,17 @@ type GscQueryResponse = {
 type GscSiteEntry = {
   siteUrl?: string;
   permissionLevel?: string;
+};
+
+type GscBundle = {
+  daily: GscQueryResponse;
+  queries: GscQueryResponse;
+  gscSiteUrl: string;
+  via: "searchconsole" | "ga4";
+};
+
+type GaMetadata = {
+  dimensions?: { apiName?: string; uiName?: string }[];
 };
 
 export type NjoSiteConfig = {
@@ -82,8 +96,7 @@ const PERIOD_LABELS: Record<
   all: { label: "All available", shortLabel: "All" },
 };
 
-let gaAuthClient: JWT | null = null;
-let gscAuthClient: JWT | null = null;
+const jwtClients = new Map<string, JWT>();
 
 const formatUtcDate = (date: Date): string => {
   const year = date.getUTCFullYear();
@@ -213,28 +226,42 @@ const publicGoogleError = (
     : "GA4 is temporarily unavailable.";
 };
 
-const getGaToken = async (): Promise<string> => {
+const getTokenForScopes = async (scopes: string[]): Promise<string> => {
+  const cacheKey = scopes.join(" ");
   const { email, key } = getPrivateKey();
-  gaAuthClient ??= new JWT({ email, key, scopes: [GA_SCOPE] });
-  const tokenResponse = await gaAuthClient.getAccessToken();
+  let client = jwtClients.get(cacheKey);
+  if (!client) {
+    client = new JWT({ email, key, scopes });
+    jwtClients.set(cacheKey, client);
+  }
+  const tokenResponse = await client.getAccessToken();
   const token =
     typeof tokenResponse === "string" ? tokenResponse : tokenResponse.token;
   if (!token) {
-    throw new Error("Unable to authorize the Google Analytics service account.");
+    throw new Error("Unable to authorize the Google service account.");
   }
   return token;
 };
 
+const getGaToken = async (): Promise<string> => getTokenForScopes([GA_SCOPE]);
+
 const getGscToken = async (): Promise<string> => {
-  const { email, key } = getPrivateKey();
-  gscAuthClient ??= new JWT({ email, key, scopes: [GSC_SCOPE] });
-  const tokenResponse = await gscAuthClient.getAccessToken();
-  const token =
-    typeof tokenResponse === "string" ? tokenResponse : tokenResponse.token;
-  if (!token) {
-    throw new Error("Unable to authorize the Search Console service account.");
+  const scopeSets = [
+    [GSC_WRITE_SCOPE, SITE_VERIFY_SCOPE],
+    [GSC_WRITE_SCOPE],
+    [GSC_READ_SCOPE],
+  ];
+  let lastError: unknown = null;
+  for (const scopes of scopeSets) {
+    try {
+      return await getTokenForScopes(scopes);
+    } catch (error) {
+      lastError = error;
+    }
   }
-  return token;
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Unable to authorize the Search Console service account.");
 };
 
 const fetchJson = async <T>(
@@ -253,19 +280,22 @@ const fetchJson = async <T>(
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
+  const detail = await response.text();
   if (!response.ok) {
-    let detail = "";
-    try {
-      detail = (await response.text()).slice(0, 800);
-    } catch {
-      detail = "";
-    }
     throw new Error(
-      `Google API error ${response.status} ${response.statusText}.${detail ? ` ${detail}` : ""}`,
+      `Google API error ${response.status} ${response.statusText}.${detail ? ` ${detail.slice(0, 800)}` : ""}`,
     );
   }
-
-  return (await response.json()) as T;
+  if (!detail.trim()) {
+    return {} as T;
+  }
+  try {
+    return JSON.parse(detail) as T;
+  } catch {
+    throw new Error(
+      `Google API returned non-JSON (${response.status} ${response.statusText}).`,
+    );
+  }
 };
 
 const hostnameFilter = (hostNames: string[]) => ({
@@ -282,7 +312,7 @@ const hostnameFilter = (hostNames: string[]) => ({
 const runGaReport = async (
   token: string,
   propertyId: string,
-  hostNames: string[],
+  hostNames: string[] | null,
   range: { from: string; to: string },
   body: Record<string, unknown>,
 ): Promise<RunReportResponse> =>
@@ -294,7 +324,7 @@ const runGaReport = async (
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         dateRanges: [{ startDate: range.from, endDate: range.to }],
-        dimensionFilter: hostnameFilter(hostNames),
+        ...(hostNames ? { dimensionFilter: hostnameFilter(hostNames) } : {}),
         ...body,
       }),
     },
@@ -351,42 +381,273 @@ const listGscSites = async (token: string): Promise<GscSiteEntry[]> => {
   return data.siteEntry ?? [];
 };
 
+const listedMatchForSite = (
+  listedSites: GscSiteEntry[] | null,
+  site: NjoSiteConfig,
+): string | null => {
+  if (!listedSites) return null;
+  const domain = site.domain.toLowerCase();
+  const matching = listedSites
+    .map((entry) => entry.siteUrl)
+    .filter((url): url is string => Boolean(url))
+    .filter((url) => url.toLowerCase().includes(domain))
+    .sort((a, b) => rankGscUrl(a, domain) - rankGscUrl(b, domain));
+  return matching[0] ?? null;
+};
+
+const probeGscSiteUrl = async (
+  token: string,
+  site: NjoSiteConfig,
+  range: { from: string; to: string },
+): Promise<string | null> => {
+  const probeRange = { from: range.to, to: range.to };
+  for (const siteUrl of gscCandidateUrls(site)) {
+    try {
+      await queryGsc(token, siteUrl, probeRange, ["date"], 1);
+      return siteUrl;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+};
+
+const canonicalPrefixUrl = (site: NjoSiteConfig): string =>
+  `https://${site.domain.toLowerCase()}/`;
+
+export const googleSiteVerificationBody = (filename: string): string =>
+  `google-site-verification: ${filename}`;
+
+const liveVerificationFileReady = async (
+  site: NjoSiteConfig,
+  filename: string,
+): Promise<boolean> => {
+  if (!/^google[a-z0-9]+\.html$/i.test(filename)) {
+    return false;
+  }
+  const url = `${site.url.replace(/\/$/, "")}/${filename}`;
+  try {
+    const response = await fetch(url, {
+      redirect: "manual",
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.status !== 200) {
+      return false;
+    }
+    const body = (await response.text()).replace(/\s+$/g, "");
+    return body === googleSiteVerificationBody(filename);
+  } catch {
+    return false;
+  }
+};
+
+const getSiteVerificationToken = async (
+  token: string,
+  identifier: string,
+  method: "FILE" | "META" | "ANALYTICS",
+): Promise<string> => {
+  const data = await fetchJson<{ token?: string }>(
+    `${SITE_VERIFY_BASE}/token`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        site: { type: "SITE", identifier },
+        verificationMethod: method,
+      }),
+    },
+  );
+  if (!data.token) {
+    throw new Error(`Site Verification did not return a ${method} token.`);
+  }
+  return data.token;
+};
+
+const insertVerifiedWebResource = async (
+  token: string,
+  identifier: string,
+  method: "FILE" | "META" | "ANALYTICS",
+): Promise<void> => {
+  await fetchJson(`${SITE_VERIFY_BASE}/webResource?verificationMethod=${method}`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      site: { type: "SITE", identifier },
+    }),
+  });
+};
+
+const addSearchConsoleSite = async (
+  token: string,
+  siteUrl: string,
+): Promise<void> => {
+  await fetchJson(`${GSC_BASE}/sites/${encodeURIComponent(siteUrl)}`, token, {
+    method: "PUT",
+  });
+};
+
+const claimGscPrefixProperty = async (
+  token: string,
+  site: NjoSiteConfig,
+  range: { from: string; to: string },
+): Promise<string | null> => {
+  const identifier = canonicalPrefixUrl(site);
+  const probeRange = { from: range.to, to: range.to };
+
+  const finish = async (): Promise<string> => {
+    try {
+      await addSearchConsoleSite(token, identifier);
+    } catch {
+      // Already present on this service account, or write scope is missing.
+    }
+    await queryGsc(token, identifier, probeRange, ["date"], 1);
+    return identifier;
+  };
+
+  try {
+    await insertVerifiedWebResource(token, identifier, "ANALYTICS");
+    return await finish();
+  } catch {
+    // Viewer on GA4 is usually not enough for ANALYTICS verification.
+  }
+
+  try {
+    const filename = await getSiteVerificationToken(token, identifier, "FILE");
+    if (await liveVerificationFileReady(site, filename)) {
+      await insertVerifiedWebResource(token, identifier, "FILE");
+      return await finish();
+    }
+  } catch {
+    // Site Verification API may be disabled, or the HTML file is not live yet.
+  }
+
+  return null;
+};
+
 const resolveGscSiteUrl = async (
   token: string,
   site: NjoSiteConfig,
   range: { from: string; to: string },
   listedSites: GscSiteEntry[] | null,
 ): Promise<string> => {
-  const domain = site.domain.toLowerCase();
-
-  if (listedSites) {
-    const matching = listedSites
-      .map((entry) => entry.siteUrl)
-      .filter((url): url is string => Boolean(url))
-      .filter((url) => url.toLowerCase().includes(domain))
-      .sort((a, b) => rankGscUrl(a, domain) - rankGscUrl(b, domain));
-    if (matching[0]) {
-      return matching[0];
-    }
-    throw new Error(
-      "Service account is not a Search Console user on this property yet.",
-    );
+  const listed = listedMatchForSite(listedSites, site);
+  if (listed) {
+    return listed;
   }
 
-  let lastError: unknown = new Error(
+  const probed = await probeGscSiteUrl(token, site, range);
+  if (probed) {
+    return probed;
+  }
+
+  const claimed = await claimGscPrefixProperty(token, site, range);
+  if (claimed) {
+    return claimed;
+  }
+
+  throw new Error(
     "Service account is not a Search Console user on this property yet.",
   );
-  const probeRange = { from: range.to, to: range.to };
-  for (const siteUrl of gscCandidateUrls(site)) {
-    try {
-      await queryGsc(token, siteUrl, probeRange, ["date"], 1);
-      return siteUrl;
-    } catch (error) {
-      lastError = error;
-    }
-  }
+};
 
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+const organicMetricsFromGaRow = (
+  row: NonNullable<RunReportResponse["rows"]>[number],
+): { clicks: number; impressions: number; ctr: number; position: number } => {
+  const clicks = Number(row.metricValues?.[0]?.value ?? 0);
+  const impressions = Number(row.metricValues?.[1]?.value ?? 0);
+  const ctr = Number(row.metricValues?.[2]?.value ?? 0);
+  const position = Number(row.metricValues?.[3]?.value ?? 0);
+  return { clicks, impressions, ctr, position };
+};
+
+const gaOrganicRowsToGsc = (
+  rows: NonNullable<RunReportResponse["rows"]> = [],
+): GscQueryResponse => ({
+  rows: rows.map((row) => {
+    const date = parseGaDate(row.dimensionValues?.[0]?.value ?? "");
+    return { keys: [date], ...organicMetricsFromGaRow(row) };
+  }),
+});
+
+const pickOrganicQueryDimension = (metadata: GaMetadata): string | null => {
+  const dimensions = metadata.dimensions ?? [];
+  const byUi = dimensions.find((item) =>
+    /organic google search query/i.test(item.uiName ?? ""),
+  );
+  if (byUi?.apiName) return byUi.apiName;
+  const byApi = dimensions.find((item) =>
+    /organicGoogleSearchQuery/i.test(item.apiName ?? ""),
+  );
+  return byApi?.apiName ?? null;
+};
+
+const fetchGaOrganicQueries = async (
+  token: string,
+  site: NjoSiteConfig,
+  range: { from: string; to: string },
+): Promise<GscQueryResponse> => {
+  try {
+    const metadata = await fetchJson<GaMetadata>(
+      `${DATA_BASE}/properties/${site.gaPropertyId}/metadata`,
+      token,
+    );
+    const dimension = pickOrganicQueryDimension(metadata);
+    if (!dimension) {
+      return { rows: [] };
+    }
+    const report = await runGaReport(token, site.gaPropertyId, null, range, {
+      dimensions: [{ name: dimension }],
+      metrics: [
+        { name: "organicGoogleSearchClicks" },
+        { name: "organicGoogleSearchImpressions" },
+        { name: "organicGoogleSearchClickThroughRate" },
+        { name: "organicGoogleSearchAveragePosition" },
+      ],
+      orderBys: [
+        { metric: { metricName: "organicGoogleSearchClicks" }, desc: true },
+      ],
+      limit: SUMMARY_ROW_LIMIT,
+    });
+    return {
+      rows: (report.rows ?? []).map((row) => ({
+        keys: [row.dimensionValues?.[0]?.value ?? "(not set)"],
+        ...organicMetricsFromGaRow(row),
+      })),
+    };
+  } catch {
+    return { rows: [] };
+  }
+};
+
+const fetchGaOrganicBundle = async (
+  token: string,
+  site: NjoSiteConfig,
+  range: { from: string; to: string },
+): Promise<GscBundle | null> => {
+  try {
+    const daily = await runGaReport(token, site.gaPropertyId, null, range, {
+      dimensions: [{ name: "date" }],
+      metrics: [
+        { name: "organicGoogleSearchClicks" },
+        { name: "organicGoogleSearchImpressions" },
+        { name: "organicGoogleSearchClickThroughRate" },
+        { name: "organicGoogleSearchAveragePosition" },
+      ],
+      orderBys: [{ dimension: { dimensionName: "date" } }],
+      limit: DAILY_ROW_LIMIT,
+    });
+    const queries = await fetchGaOrganicQueries(token, site, range);
+    return {
+      daily: gaOrganicRowsToGsc(daily.rows),
+      queries,
+      gscSiteUrl: site.gscSiteUrl,
+      via: "ga4",
+    };
+  } catch {
+    return null;
+  }
 };
 
 const metricValues = (
@@ -555,7 +816,7 @@ const fetchSiteSnapshot = async (
         orderBys: [{ metric: { metricName: "newUsers" }, desc: true }],
         limit: SUMMARY_ROW_LIMIT,
       }),
-      (async () => {
+      (async (): Promise<GscBundle> => {
         const gscToken = await getGscToken();
         const gscSiteUrl = await resolveGscSiteUrl(
           gscToken,
@@ -567,7 +828,7 @@ const fetchSiteSnapshot = async (
           queryGsc(gscToken, gscSiteUrl, range, ["date"], DAILY_ROW_LIMIT),
           queryGsc(gscToken, gscSiteUrl, range, ["query"], SUMMARY_ROW_LIMIT),
         ]);
-        return { daily, queries, gscSiteUrl };
+        return { daily, queries, gscSiteUrl, via: "searchconsole" };
       })(),
     ]);
 
@@ -577,34 +838,38 @@ const fetchSiteSnapshot = async (
         ? gaDailyResult.reason.message
         : String(gaDailyResult.reason)
       : null;
-  const gscErrorRaw =
-    gscResult.status === "rejected"
-      ? gscResult.reason instanceof Error
-        ? gscResult.reason.message
-        : String(gscResult.reason)
-      : null;
-  const gaError = publicGoogleError(gaErrorRaw, "ga4");
-  const gscError = publicGoogleError(gscErrorRaw, "gsc");
-  const serviceAccountEmail = getPrivateKey().email;
-
   const gaDaily =
     gaDailyResult.status === "fulfilled" ? gaDailyResult.value.rows : [];
   const gaPages =
     gaPagesResult.status === "fulfilled" ? gaPagesResult.value.rows : [];
   const gaChannels =
     gaChannelsResult.status === "fulfilled" ? gaChannelsResult.value.rows : [];
-  const gscDaily =
-    gscResult.status === "fulfilled" ? (gscResult.value.daily.rows ?? []) : [];
-  const gscQueries =
-    gscResult.status === "fulfilled"
-      ? (gscResult.value.queries.rows ?? [])
-      : [];
-  const resolvedGscSiteUrl =
-    gscResult.status === "fulfilled"
-      ? gscResult.value.gscSiteUrl
-      : site.gscSiteUrl;
 
-  const gscAvailable = gscResult.status === "fulfilled";
+  let gscBundle: GscBundle | null =
+    gscResult.status === "fulfilled" ? gscResult.value : null;
+  let gscErrorRaw =
+    gscResult.status === "rejected"
+      ? gscResult.reason instanceof Error
+        ? gscResult.reason.message
+        : String(gscResult.reason)
+      : null;
+
+  if (!gscBundle) {
+    const gaOrganic = await fetchGaOrganicBundle(gaToken, site, range);
+    if (gaOrganic) {
+      gscBundle = gaOrganic;
+      gscErrorRaw = null;
+    }
+  }
+
+  const gaError = publicGoogleError(gaErrorRaw, "ga4");
+  const gscError = publicGoogleError(gscErrorRaw, "gsc");
+  const serviceAccountEmail = getPrivateKey().email;
+  const gscDaily = gscBundle?.daily.rows ?? [];
+  const gscQueries = gscBundle?.queries.rows ?? [];
+  const resolvedGscSiteUrl = gscBundle?.gscSiteUrl ?? site.gscSiteUrl;
+  const gscAvailable = Boolean(gscBundle);
+  const gscVia = gscBundle?.via ?? null;
   const gaAvailable = gaDailyResult.status === "fulfilled";
 
   const earliestGa = gaDaily
@@ -749,7 +1014,9 @@ const fetchSiteSnapshot = async (
         label: "GSC property",
         value: resolvedGscSiteUrl,
         detail: gscAvailable
-          ? "Live Search Console searchAnalytics rows."
+          ? gscVia === "ga4"
+            ? "Live organic Google Search rows from the GA4 Search Console link."
+            : "Live Search Console searchAnalytics rows."
           : `${gscError ?? "Search Console unavailable."} Add ${serviceAccountEmail} as a user on this Search Console property.`,
       },
       {
@@ -789,6 +1056,7 @@ const fetchSiteSnapshot = async (
     sources: {
       ga4: gaAvailable ? "connected" : "unavailable",
       gsc: gscAvailable ? "connected" : "unavailable",
+      gscVia,
       gaError,
       gscError,
     },
@@ -854,7 +1122,7 @@ export const getNjoSitesReport = async (periodId: NjoPeriodId) => {
 
 const readCachedNjoSitesReport = unstable_cache(
   async (periodId: NjoPeriodId) => getNjoSitesReport(periodId),
-  ["njo-sites-report-v3"],
+  ["njo-sites-report-v4"],
   { revalidate: 60 },
 );
 
