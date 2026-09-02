@@ -13,7 +13,7 @@ const DNS_SCOPE = "https://www.googleapis.com/auth/ndev.clouddns.readwrite";
 const REQUEST_TIMEOUT_MS = 25_000;
 const HISTORICAL_FLOOR = "2024-01-01";
 const DAILY_ROW_LIMIT = 5000;
-const SUMMARY_ROW_LIMIT = 10;
+const SUMMARY_ROW_LIMIT = 25;
 
 export type NjoPeriodId = "last30" | "last90" | "ytd" | "all";
 export type SiteId = "njo" | "pti";
@@ -45,11 +45,16 @@ type GscBundle = {
   queries: GscQueryResponse;
   gscSiteUrl: string;
   via: "searchconsole" | "ga4";
+  metaToken?: string | null;
+  fileToken?: string | null;
+  claimError?: string | null;
 };
 
 type GscClaimResult = {
   siteUrl: string | null;
   error: string | null;
+  metaToken: string | null;
+  fileToken: string | null;
 };
 
 type SiteVerificationMethod = "FILE" | "META" | "ANALYTICS" | "DNS_TXT";
@@ -296,6 +301,9 @@ const publicClaimError = (error: unknown): string => {
   if (/FILE token|verification file/i.test(text)) {
     return text.slice(0, 240);
   }
+  if (/necessary verification token could not be found/i.test(text)) {
+    return "Google fetched the site but did not find this service account's verification token.";
+  }
   if (/403|sufficient permission|forbidden/i.test(text)) {
     return "Search Console verification was denied for this service account.";
   }
@@ -419,35 +427,68 @@ const listGscSites = async (token: string): Promise<GscSiteEntry[]> => {
   return data.siteEntry ?? [];
 };
 
-const listedMatchForSite = (
+const isUsableGscPermission = (level?: string): boolean => {
+  if (!level) return true;
+  return !/unverified/i.test(level);
+};
+
+const matchingGscEntries = (
   listedSites: GscSiteEntry[] | null,
   site: NjoSiteConfig,
-): string | null => {
-  if (!listedSites) return null;
+): GscSiteEntry[] => {
+  if (!listedSites) return [];
   const domain = site.domain.toLowerCase();
-  const matching = listedSites
-    .map((entry) => entry.siteUrl)
-    .filter((url): url is string => Boolean(url))
-    .filter((url) => url.toLowerCase().includes(domain))
-    .sort((a, b) => rankGscUrl(a, domain) - rankGscUrl(b, domain));
-  return matching[0] ?? null;
+  return listedSites
+    .filter((entry) => (entry.siteUrl ?? "").toLowerCase().includes(domain))
+    .filter((entry) => isUsableGscPermission(entry.permissionLevel))
+    .sort(
+      (a, b) =>
+        rankGscUrl(a.siteUrl ?? "", domain) - rankGscUrl(b.siteUrl ?? "", domain),
+    );
 };
+
+const listedUrlsForSite = (
+  listedSites: GscSiteEntry[] | null,
+  site: NjoSiteConfig,
+): string[] =>
+  matchingGscEntries(listedSites, site)
+    .map((entry) => entry.siteUrl)
+    .filter((url): url is string => Boolean(url));
 
 const probeGscSiteUrl = async (
   token: string,
   site: NjoSiteConfig,
   range: { from: string; to: string },
+  preferred: string[] = [],
 ): Promise<string | null> => {
-  const probeRange = { from: range.to, to: range.to };
-  for (const siteUrl of gscCandidateUrls(site)) {
+  const seen = new Set<string>();
+  const candidates = [...preferred, ...gscCandidateUrls(site)].filter((url) => {
+    if (seen.has(url)) return false;
+    seen.add(url);
+    return true;
+  });
+  let firstOk: string | null = null;
+  for (const siteUrl of candidates) {
     try {
-      await queryGsc(token, siteUrl, probeRange, ["date"], 1);
-      return siteUrl;
-    } catch {
-      continue;
+      const daily = await queryGsc(token, siteUrl, range, ["date"], DAILY_ROW_LIMIT);
+      const impressions = (daily.rows ?? []).reduce(
+        (total, row) => total + Number(row.impressions ?? 0),
+        0,
+      );
+      if (impressions > 0) {
+        console.info(`[njo-sites] ${site.id} GSC ${siteUrl} has ${impressions} impressions`);
+        return siteUrl;
+      }
+      firstOk ??= siteUrl;
+      console.info(`[njo-sites] ${site.id} GSC ${siteUrl} responded with no rows`);
+    } catch (error) {
+      console.info(
+        `[njo-sites] ${site.id} GSC ${siteUrl} skipped`,
+        rawErrorText(error).slice(0, 180),
+      );
     }
   }
-  return null;
+  return firstOk;
 };
 
 const canonicalPrefixUrl = (site: NjoSiteConfig): string =>
@@ -487,8 +528,14 @@ const liveVerificationFileReady = async (
     if (response.status !== 200) {
       return false;
     }
-    const body = (await response.text()).replace(/\s+$/g, "");
-    return body === googleSiteVerificationBody(name);
+    const body = (await response.text()).replace(/^\uFEFF/, "").replace(/\s+$/g, "");
+    const expected = googleSiteVerificationBody(name);
+    return (
+      body === expected ||
+      body === filename.trim() ||
+      body.includes(expected) ||
+      body.includes(`google-site-verification: ${name}`)
+    );
   } catch {
     return false;
   }
@@ -633,17 +680,32 @@ const finishGscSite = async (
   } catch {
     // Already present, or write scope is missing.
   }
-  try {
-    await addSearchConsoleSite(token, site.gscSiteUrl);
-  } catch {
-    // Domain property still needs DNS verification.
+  if (siteUrl.toLowerCase().startsWith("sc-domain:")) {
+    try {
+      await addSearchConsoleSite(token, site.gscSiteUrl);
+    } catch {
+      // Domain property still needs DNS verification.
+    }
   }
-  const listed = listedMatchForSite(await listGscSites(token).catch(() => []), site);
-  const resolved =
-    listed ?? (await probeGscSiteUrl(token, site, range)) ?? siteUrl;
-  await queryGsc(token, resolved, { from: range.to, to: range.to }, ["date"], 1);
-  return resolved;
+  const listed = await listGscSites(token).catch(() => []);
+  console.info(
+    `[njo-sites] ${site.id} listed after claim`,
+    listed
+      .filter((entry) => (entry.siteUrl ?? "").toLowerCase().includes(site.domain))
+      .map((entry) => `${entry.siteUrl}:${entry.permissionLevel ?? "unknown"}`),
+  );
+  return (
+    (await probeGscSiteUrl(token, site, range, listedUrlsForSite(listed, site))) ??
+    siteUrl
+  );
 };
+
+const emptyClaim = (): GscClaimResult => ({
+  siteUrl: null,
+  error: null,
+  metaToken: null,
+  fileToken: null,
+});
 
 const claimGscProperty = async (
   token: string,
@@ -657,13 +719,17 @@ const claimGscProperty = async (
   };
   const prefixSite: SiteVerificationSite = { type: "SITE", identifier: prefix };
   const errors: string[] = [];
+  const claimed: GscClaimResult = emptyClaim();
 
   await enableGoogleApi(token, "siteverification.googleapis.com");
   await enableGoogleApi(token, "dns.googleapis.com");
 
   try {
     await insertVerifiedWebResource(token, prefixSite, "ANALYTICS");
-    return { siteUrl: await finishGscSite(token, site, prefix, range), error: null };
+    return {
+      ...claimed,
+      siteUrl: await finishGscSite(token, site, prefix, range),
+    };
   } catch (error) {
     errors.push(`ANALYTICS: ${publicClaimError(error)}`);
     console.error(`[njo-sites] ${site.id} ANALYTICS verify failed`, rawErrorText(error));
@@ -679,8 +745,8 @@ const claimGscProperty = async (
     }
     await insertVerifiedWebResource(token, domainSite, "DNS_TXT");
     return {
+      ...claimed,
       siteUrl: await finishGscSite(token, site, site.gscSiteUrl, range),
-      error: null,
     };
   } catch (error) {
     errors.push(`DNS_TXT: ${publicClaimError(error)}`);
@@ -688,8 +754,22 @@ const claimGscProperty = async (
   }
 
   try {
-    const filenameToken = await getSiteVerificationToken(token, prefixSite, "FILE");
-    const filename = normalizeFileVerificationName(filenameToken);
+    claimed.metaToken = await getSiteVerificationToken(token, prefixSite, "META");
+    console.info(`[njo-sites] ${site.id} META token ${claimed.metaToken}`);
+    await insertVerifiedWebResource(token, prefixSite, "META");
+    return {
+      ...claimed,
+      siteUrl: await finishGscSite(token, site, prefix, range),
+    };
+  } catch (error) {
+    errors.push(`META: ${publicClaimError(error)}`);
+    console.error(`[njo-sites] ${site.id} META verify failed`, rawErrorText(error));
+  }
+
+  try {
+    claimed.fileToken = await getSiteVerificationToken(token, prefixSite, "FILE");
+    console.info(`[njo-sites] ${site.id} FILE token ${claimed.fileToken}`);
+    const filename = normalizeFileVerificationName(claimed.fileToken);
     if (!filename) {
       throw new Error(`FILE token was not a google*.html name.`);
     }
@@ -698,13 +778,19 @@ const claimGscProperty = async (
       throw new Error(`Verification file ${filename} is not live on ${site.domain}.`);
     }
     await insertVerifiedWebResource(token, prefixSite, "FILE");
-    return { siteUrl: await finishGscSite(token, site, prefix, range), error: null };
+    return {
+      ...claimed,
+      siteUrl: await finishGscSite(token, site, prefix, range),
+    };
   } catch (error) {
     errors.push(`FILE: ${publicClaimError(error)}`);
     console.error(`[njo-sites] ${site.id} FILE verify failed`, rawErrorText(error));
   }
 
-  return { siteUrl: null, error: errors.at(-1) ?? publicClaimError("unverified") };
+  return {
+    ...claimed,
+    error: errors.at(-1) ?? publicClaimError("unverified"),
+  };
 };
 
 const resolveGscSiteUrl = async (
@@ -713,14 +799,18 @@ const resolveGscSiteUrl = async (
   range: { from: string; to: string },
   listedSites: GscSiteEntry[] | null,
 ): Promise<GscClaimResult> => {
-  const listed = listedMatchForSite(listedSites, site);
-  if (listed) {
-    return { siteUrl: listed, error: null };
+  const listedUrls = listedUrlsForSite(listedSites, site);
+  if (listedSites?.length) {
+    console.info(
+      `[njo-sites] ${site.id} listed`,
+      matchingGscEntries(listedSites, site).map(
+        (entry) => `${entry.siteUrl}:${entry.permissionLevel ?? "unknown"}`,
+      ),
+    );
   }
-
-  const probed = await probeGscSiteUrl(token, site, range);
+  const probed = await probeGscSiteUrl(token, site, range, listedUrls);
   if (probed) {
-    return { siteUrl: probed, error: null };
+    return { ...emptyClaim(), siteUrl: probed };
   }
 
   const claimed = await claimGscProperty(token, site, range);
@@ -729,6 +819,7 @@ const resolveGscSiteUrl = async (
   }
 
   return {
+    ...claimed,
     siteUrl: null,
     error:
       claimed.error ??
@@ -1017,17 +1108,46 @@ const fetchSiteSnapshot = async (
           range,
           listedGscSites,
         );
-        if (!resolved.siteUrl) {
-          throw new Error(
-            resolved.error ??
-              "Service account is not a Search Console user on this property yet.",
-          );
+        const tryUrls = [
+          resolved.siteUrl,
+          ...listedUrlsForSite(listedGscSites, site),
+          ...gscCandidateUrls(site),
+        ].filter((url, index, all): url is string => Boolean(url) && all.indexOf(url) === index);
+        let lastError = resolved.error;
+        for (const siteUrl of tryUrls) {
+          try {
+            const [daily, queries] = await Promise.all([
+              queryGsc(gscToken, siteUrl, range, ["date"], DAILY_ROW_LIMIT),
+              queryGsc(gscToken, siteUrl, range, ["query"], SUMMARY_ROW_LIMIT),
+            ]);
+            console.info(
+              `[njo-sites] ${site.id} native GSC ${siteUrl} queries=${queries.rows?.length ?? 0}`,
+            );
+            return {
+              daily,
+              queries,
+              gscSiteUrl: siteUrl,
+              via: "searchconsole",
+              metaToken: resolved.metaToken,
+              fileToken: resolved.fileToken,
+            };
+          } catch (error) {
+            lastError = publicClaimError(error);
+            console.info(
+              `[njo-sites] ${site.id} native GSC ${siteUrl} failed`,
+              rawErrorText(error).slice(0, 180),
+            );
+          }
         }
-        const [daily, queries] = await Promise.all([
-          queryGsc(gscToken, resolved.siteUrl, range, ["date"], DAILY_ROW_LIMIT),
-          queryGsc(gscToken, resolved.siteUrl, range, ["query"], SUMMARY_ROW_LIMIT),
-        ]);
-        return { daily, queries, gscSiteUrl: resolved.siteUrl, via: "searchconsole" };
+        return {
+          daily: { rows: [] },
+          queries: { rows: [] },
+          gscSiteUrl: site.gscSiteUrl,
+          via: "ga4",
+          metaToken: resolved.metaToken,
+          fileToken: resolved.fileToken,
+          claimError: lastError,
+        };
       })(),
     ]);
 
@@ -1046,12 +1166,16 @@ const fetchSiteSnapshot = async (
 
   let gscBundle: GscBundle | null =
     gscResult.status === "fulfilled" ? gscResult.value : null;
+  const gscMetaToken = gscBundle?.metaToken ?? null;
+  const gscFileToken = gscBundle?.fileToken ?? null;
   const gscErrorRaw =
     gscResult.status === "rejected"
       ? gscResult.reason instanceof Error
         ? gscResult.reason.message
         : String(gscResult.reason)
-      : null;
+      : gscBundle?.via === "searchconsole"
+        ? null
+        : (gscBundle?.claimError ?? null);
   const nativeSearch = gscBundle?.via === "searchconsole" ? gscBundle : null;
   const nativeSearchTotals = nativeSearch
     ? sumSearchRows(nativeSearch.daily.rows)
@@ -1059,17 +1183,23 @@ const fetchSiteSnapshot = async (
   const nativeHasQueries = (nativeSearch?.queries.rows?.length ?? 0) > 0;
   const nativeHasTraffic = (nativeSearchTotals?.impressions ?? 0) > 0;
 
-  if (!gscBundle || (gscBundle.via === "searchconsole" && !nativeHasTraffic)) {
+  if (!gscBundle || gscBundle.via !== "searchconsole" || !nativeHasTraffic) {
     const gaOrganic = await fetchGaOrganicBundle(gaToken, site, range);
     if (gaOrganic) {
-      gscBundle = nativeHasQueries
-        ? { ...gaOrganic, queries: nativeSearch!.queries, via: "searchconsole" }
-        : gaOrganic;
+      gscBundle = {
+        ...(nativeHasQueries
+          ? { ...gaOrganic, queries: nativeSearch!.queries, via: "searchconsole" }
+          : gaOrganic),
+        metaToken: gscMetaToken,
+        fileToken: gscFileToken,
+        claimError: gscErrorRaw,
+      };
     }
   }
 
   const gaError = publicGoogleError(gaErrorRaw, "ga4");
-  const gscClaimError = gscErrorRaw ? publicClaimError(gscErrorRaw) : null;
+  const gscClaimError =
+    gscBundle?.claimError ?? (gscErrorRaw ? publicClaimError(gscErrorRaw) : null);
   const gscError = publicGoogleError(
     gscBundle ? null : gscErrorRaw,
     "gsc",
@@ -1261,6 +1391,26 @@ const fetchSiteSnapshot = async (
                 gscClaimError ??
                 "Add this service account as a user on both Search Console domain properties to load query rows.",
             },
+            ...(gscMetaToken
+              ? [
+                  {
+                    label: "GSC meta token",
+                    value: gscMetaToken,
+                    detail:
+                      "Homepage google-site-verification meta content for this service account.",
+                  },
+                ]
+              : []),
+            ...(gscFileToken
+              ? [
+                  {
+                    label: "GSC file token",
+                    value: gscFileToken,
+                    detail:
+                      "Root google*.html verification file name for this service account.",
+                  },
+                ]
+              : []),
           ]
         : []),
     ],
@@ -1271,6 +1421,8 @@ const fetchSiteSnapshot = async (
       gaError,
       gscError,
       gscClaimError,
+      gscMetaToken,
+      gscFileToken,
     },
   };
 };
@@ -1334,7 +1486,7 @@ export const getNjoSitesReport = async (periodId: NjoPeriodId) => {
 
 const readCachedNjoSitesReport = unstable_cache(
   async (periodId: NjoPeriodId) => getNjoSitesReport(periodId),
-  ["njo-sites-report-v5"],
+  ["njo-sites-report-v7"],
   { revalidate: 60 },
 );
 
