@@ -30,6 +30,11 @@ type GscQueryResponse = {
   }[];
 };
 
+type GscSiteEntry = {
+  siteUrl?: string;
+  permissionLevel?: string;
+};
+
 export type NjoSiteConfig = {
   id: SiteId;
   name: string;
@@ -194,7 +199,10 @@ const publicGoogleError = (
   kind: "ga4" | "gsc",
 ): string | null => {
   if (!error) return null;
-  if (kind === "gsc" && /sufficient permission|403/.test(error)) {
+  if (
+    kind === "gsc" &&
+    /sufficient permission|403|not a Search Console user/.test(error)
+  ) {
     return "Service account is not a Search Console user on this property yet.";
   }
   if (/429/.test(error)) {
@@ -313,6 +321,73 @@ const queryGsc = async (
       }),
     },
   );
+
+const gscCandidateUrls = (site: NjoSiteConfig): string[] => {
+  const domain = site.domain.toLowerCase();
+  return [
+    site.gscSiteUrl,
+    `sc-domain:${domain}`,
+    `https://www.${domain}/`,
+    `https://${domain}/`,
+    `http://www.${domain}/`,
+    `http://${domain}/`,
+  ].filter((url, index, all) => all.indexOf(url) === index);
+};
+
+const rankGscUrl = (siteUrl: string, domain: string): number => {
+  const lower = siteUrl.toLowerCase();
+  if (lower === `sc-domain:${domain}`) return 0;
+  if (lower === `https://www.${domain}/`) return 1;
+  if (lower === `https://${domain}/`) return 2;
+  if (lower.includes(domain)) return 3;
+  return 99;
+};
+
+const listGscSites = async (token: string): Promise<GscSiteEntry[]> => {
+  const data = await fetchJson<{ siteEntry?: GscSiteEntry[] }>(
+    `${GSC_BASE}/sites`,
+    token,
+  );
+  return data.siteEntry ?? [];
+};
+
+const resolveGscSiteUrl = async (
+  token: string,
+  site: NjoSiteConfig,
+  range: { from: string; to: string },
+  listedSites: GscSiteEntry[] | null,
+): Promise<string> => {
+  const domain = site.domain.toLowerCase();
+
+  if (listedSites) {
+    const matching = listedSites
+      .map((entry) => entry.siteUrl)
+      .filter((url): url is string => Boolean(url))
+      .filter((url) => url.toLowerCase().includes(domain))
+      .sort((a, b) => rankGscUrl(a, domain) - rankGscUrl(b, domain));
+    if (matching[0]) {
+      return matching[0];
+    }
+    throw new Error(
+      "Service account is not a Search Console user on this property yet.",
+    );
+  }
+
+  let lastError: unknown = new Error(
+    "Service account is not a Search Console user on this property yet.",
+  );
+  const probeRange = { from: range.to, to: range.to };
+  for (const siteUrl of gscCandidateUrls(site)) {
+    try {
+      await queryGsc(token, siteUrl, probeRange, ["date"], 1);
+      return siteUrl;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+};
 
 const metricValues = (
   row: NonNullable<RunReportResponse["rows"]>[number],
@@ -443,6 +518,7 @@ const fetchSiteSnapshot = async (
   site: NjoSiteConfig,
   range: ReturnType<typeof buildRange>,
   generatedAt: string,
+  listedGscSites: GscSiteEntry[] | null,
 ) => {
   const gaToken = await getGaToken();
   const [gaDailyResult, gaPagesResult, gaChannelsResult, gscResult] =
@@ -481,17 +557,17 @@ const fetchSiteSnapshot = async (
       }),
       (async () => {
         const gscToken = await getGscToken();
+        const gscSiteUrl = await resolveGscSiteUrl(
+          gscToken,
+          site,
+          range,
+          listedGscSites,
+        );
         const [daily, queries] = await Promise.all([
-          queryGsc(gscToken, site.gscSiteUrl, range, ["date"], DAILY_ROW_LIMIT),
-          queryGsc(
-            gscToken,
-            site.gscSiteUrl,
-            range,
-            ["query"],
-            SUMMARY_ROW_LIMIT,
-          ),
+          queryGsc(gscToken, gscSiteUrl, range, ["date"], DAILY_ROW_LIMIT),
+          queryGsc(gscToken, gscSiteUrl, range, ["query"], SUMMARY_ROW_LIMIT),
         ]);
-        return { daily, queries };
+        return { daily, queries, gscSiteUrl };
       })(),
     ]);
 
@@ -523,6 +599,10 @@ const fetchSiteSnapshot = async (
     gscResult.status === "fulfilled"
       ? (gscResult.value.queries.rows ?? [])
       : [];
+  const resolvedGscSiteUrl =
+    gscResult.status === "fulfilled"
+      ? gscResult.value.gscSiteUrl
+      : site.gscSiteUrl;
 
   const gscAvailable = gscResult.status === "fulfilled";
   const gaAvailable = gaDailyResult.status === "fulfilled";
@@ -667,7 +747,7 @@ const fetchSiteSnapshot = async (
       },
       {
         label: "GSC property",
-        value: site.gscSiteUrl,
+        value: resolvedGscSiteUrl,
         detail: gscAvailable
           ? "Live Search Console searchAnalytics rows."
           : `${gscError ?? "Search Console unavailable."} Add ${serviceAccountEmail} as a user on this Search Console property.`,
@@ -724,8 +804,16 @@ export const isNjoPeriodId = (value: string): value is NjoPeriodId =>
 export const getNjoSitesReport = async (periodId: NjoPeriodId) => {
   const generatedAt = new Date().toISOString();
   const range = buildRange(periodId);
+  let listedGscSites: GscSiteEntry[] | null = null;
+  try {
+    listedGscSites = await listGscSites(await getGscToken());
+  } catch {
+    listedGscSites = null;
+  }
   const snapshots = await Promise.all(
-    NJO_SITES.map((site) => fetchSiteSnapshot(site, range, generatedAt)),
+    NJO_SITES.map((site) =>
+      fetchSiteSnapshot(site, range, generatedAt, listedGscSites),
+    ),
   );
 
   return {
@@ -766,7 +854,7 @@ export const getNjoSitesReport = async (periodId: NjoPeriodId) => {
 
 const readCachedNjoSitesReport = unstable_cache(
   async (periodId: NjoPeriodId) => getNjoSitesReport(periodId),
-  ["njo-sites-report-v2"],
+  ["njo-sites-report-v3"],
   { revalidate: 60 },
 );
 
