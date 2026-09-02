@@ -135,6 +135,15 @@ Returns one property's summary and daily current/previous series.
 
 Returns the deduplicated portfolio total and error count.
 
+`GET /api/njo-sites?period=last30|last90|ytd|all`
+
+Live GA4 + Search Console payload for Dr. Njo’s two marketing sites only:
+`michaelnjodds.com` (property `516211709` / `G-6HWEE040EH`) and
+`practicetransitionsinstitute.com` (property `502361992` / `G-XCBKH87HG5`).
+GA4 rows are filtered to production hostnames. Search Console uses the domain
+properties. CORS is limited to the Njo executive dashboard origins. The Njo
+dashboard at `https://njo-dashboard.vercel.app` reads this endpoint.
+
 Date windows end on the last completed day in each GA4 property's reporting
 timezone. When multiple properties point at the same normalized website domain,
 the dashboard and total endpoints consistently use the newest property ID.
