@@ -15,6 +15,17 @@ The user story is:
 
 `dashboard page → Next.js API route → GA Admin API property discovery → GA Data API newUsers report → normalized response → property cards and detail charts`
 
+Dr. Njo’s owner dashboard is a separate app (`njo-dashboard`). It loads live
+GA4 and Search Console for PTI and michaelnjodds.com from:
+
+`GET /api/njo-sites?period=last30|last90|ytd|all`
+
+That route uses the same service account. Grant the service account **Viewer**
+on both GA4 properties and **Full** (or at least Restricted) user access on both
+Search Console domain properties (`sc-domain:michaelnjodds.com` and
+`sc-domain:practicetransitionsinstitute.com`). If Search Console is missing,
+GA4 still returns; GSC metrics show as Pending instead of fake zeros.
+
 The production service account is the authorization boundary. A property being
 visible to a human Google account does not make it visible to the dashboard.
 
