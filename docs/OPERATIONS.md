@@ -25,8 +25,14 @@ on both GA4 properties and **Full** (or at least Restricted) user access on both
 Search Console properties for those domains (domain property or URL-prefix).
 The Njo endpoint lists Search Console sites the service account can see and
 uses the matching property for each domain, so either `sc-domain:` or
-`https://www.example.com/` works once the account is added. If Search Console
-is missing, GA4 still returns; GSC metrics show as Pending instead of fake zeros.
+`https://example.com/` works. If the list has no match, it probes URL-prefix
+candidates, then tries to verify the property: Analytics, DNS TXT (Cloud DNS
+when the zone is in the same GCP project), then the live `/google*.html` file
+on each site (`text/plain`). Native Search Console supplies query rows.
+If Search Console is still closed, the endpoint falls back to GA4
+`organicGoogleSearch*` metrics so clicks and impressions still render. Query
+rows stay empty until the service account is a Search Console user. If both
+fail, GSC metrics show as Pending instead of fake zeros.
 
 The production service account is the authorization boundary. A property being
 visible to a human Google account does not make it visible to the dashboard.
