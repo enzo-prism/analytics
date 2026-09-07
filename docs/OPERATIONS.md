@@ -184,3 +184,5 @@ The Playwright suite assumes a local server without live credentials because
 its API fixtures must control initial data. Run a credential-free test copy
 separately from a live-data preview. A live server pre-renders successful GA
 rows and correctly treats later failures as stale data, not an initial outage.
+
+September 6 rollout activation verified: Joe Town property Viewer grant saved; Midas Web Analytics enabled; dedicated team-scoped Vercel credential stored as a sensitive production variable (expires September 7, 2027).

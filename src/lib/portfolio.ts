@@ -21,13 +21,19 @@ export function mergeTrackedProjects(ga: DashboardProperty[], vercel: DashboardP
   }), ...vercel];
 }
 
+function isIncludedGaProperty(id: string) {
+  const allow = (process.env.GA_PROPERTY_ALLOWLIST ?? "").split(",").map(v => v.trim()).filter(Boolean);
+  const block = (process.env.GA_PROPERTY_BLOCKLIST ?? "").split(",").map(v => v.trim()).filter(Boolean);
+  return (!allow.length || allow.includes(id)) && !block.includes(id);
+}
+
 async function getPortfolio(window: DashboardWindow): Promise<DashboardResponse> {
   const [ga, vercel] = await Promise.all([
     getGaDashboard(window).catch(() => null),
     Promise.all(TRACKED_PROJECTS.filter(p => !p.gaPropertyId).map(p => getVercelDashboardProperty(p, window))),
   ]);
   if (!ga && vercel.every(p => p.error)) throw new Error("Analytics sources are unavailable.");
-  const gaRows = ga?.properties ?? TRACKED_PROJECTS.filter(p => p.gaPropertyId).map(p => ({
+  const gaRows = ga?.properties ?? TRACKED_PROJECTS.filter(p => p.gaPropertyId && isIncludedGaProperty(p.gaPropertyId)).map(p => ({
     propertyId: p.gaPropertyId!, displayName: p.name, defaultUri: p.url, emoji: "", newUsers: null,
     error: "Google Analytics is temporarily unavailable.",
   }));
