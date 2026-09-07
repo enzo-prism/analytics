@@ -1,5 +1,5 @@
 import DashboardClient from "./dashboard-client";
-import { getCachedDashboardData } from "@/lib/ga";
+import { getCachedDashboardData } from "@/lib/portfolio";
 import type { DashboardResponse } from "@/lib/types";
 
 export const revalidate = 60;

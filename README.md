@@ -176,3 +176,31 @@ bounded retries with per-request timeouts.
 - Private key issues: ensure `GA_PRIVATE_KEY` uses `\n` for newlines in Vercel.
 - Partial data: requests retry bounded 429/5xx failures, while permanent property
   errors remain visible under the Data issues filter and on the affected card.
+
+## Personal project coverage
+
+`src/lib/tracked-projects.ts` registers Joe Town, Peak, Marble, Midas, z0 and
+zRead. The **My projects** filter shows these six sites together. Joe Town uses
+GA4 new users; the other five use Vercel visitors. Cards and detail pages label
+the source and metric. These metrics are not interchangeable: `/api/total`
+continues to return GA4 new users only.
+
+Vercel requires server-only `VERCEL_ANALYTICS_TOKEN` and
+`VERCEL_ANALYTICS_TEAM_ID`. Never prefix the token with `NEXT_PUBLIC_` or commit
+it. Enable Web Analytics on each source project. Queries use production traffic
+and complete UTC days, with separate current/prior totals and daily trends.
+Whole-period visitors are read directly rather than summed from daily counts.
+Unavailable access, disabled collection, malformed data, or a provider-clamped
+history window are shown as data issues, never fabricated zeroes. Long daily
+series are split into requests of at most 90 days under the API's 100-row limit.
+
+GA4 discovery remains automatic. Joe Town's known property `546640674` also
+stays visible when its Viewer permission is missing. Existing allowlists and
+blocklists still apply. Vercel-selected domains are removed from GA dashboard
+rows to avoid duplicate cards. A GA outage leaves available Vercel results
+visible with an explicit source warning.
+
+Verified on September 6, 2026: Peak, Marble, z0 and zRead return live Vercel data.
+Midas has instrumentation but needs Web Analytics enabled. Joe Town has a live
+GA4 tag but the dashboard service account needs property-level Viewer access.
+These activation steps and production publishing require approval.

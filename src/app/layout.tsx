@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "New Users / GA Portfolio",
-  description: "Live GA4 new-user performance across the full property portfolio.",
+  title: "Website Analytics",
+  description: "Google Analytics and Vercel website performance across your portfolio.",
 };
 
 export default function RootLayout({

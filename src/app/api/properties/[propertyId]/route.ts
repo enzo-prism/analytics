@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getCachedPropertyDetail } from "@/lib/ga";
+import { getCachedPropertyDetail } from "@/lib/portfolio";
 import type { DashboardWindow } from "@/lib/types";
 
 export const runtime = "nodejs";

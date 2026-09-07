@@ -157,3 +157,30 @@ it scrolls horizontally inside its own container without widening the page.
 
 Keep Git state, build state, deployment state, and live data readback distinct in
 release notes.
+
+## Six-project rollout (September 2026)
+
+Before release, approve and perform these external actions:
+
+1. Grant the existing dashboard GA service account **Viewer** on Joe Town
+   property `546640674` (account `401978558`). Do not grant Editor/Admin.
+2. Enable Web Analytics for Midas project
+   `prj_QE4cLtn3PWTWa2twMtpmpp5jXSn9`; its deployed script already exists.
+3. Configure server-only `VERCEL_ANALYTICS_TOKEN` (a dedicated team-scoped
+   credential) and `VERCEL_ANALYTICS_TEAM_ID=team_NbogaPSGlnnTm8RNaeS0B4Pl`
+   on the analytics dashboard's production environment.
+4. Push the reviewed dashboard change and deploy the exact commit to
+   `analytics-neon-zeta.vercel.app`.
+5. Read back all six dashboard rows and detail endpoints. Compare Vercel
+   whole-window visitor totals against the aggregate API using explicit ISO
+   complete-day timestamps; date-only `until` can omit most of the final day.
+   Check the My projects filter, mobile layout and metric/source labels.
+
+Midas has no historical collection to backfill. Do not call zero historical
+visitors evidence of tracking: verify enabled status, deployed script and a
+subsequent real visit/report. GA4 processing can also lag.
+
+The Playwright suite assumes a local server without live credentials because
+its API fixtures must control initial data. Run a credential-free test copy
+separately from a live-data preview. A live server pre-renders successful GA
+rows and correctly treats later failures as stale data, not an initial outage.

@@ -110,6 +110,7 @@ const formatShortDate = (value: string) => {
 };
 
 const friendlyErrorMessage = (message: string) => {
+  if (message.startsWith("Web Analytics") || message.startsWith("Vercel Analytics") || message.startsWith("Connect Vercel") || message.startsWith("This date range") || message.includes("excluded") || message.includes("ALLOWLIST") || message.includes("Grant the dashboard")) return message;
   const normalized = message.toLowerCase();
 
   if (
@@ -250,6 +251,7 @@ export default function PropertyDetailClient({
     WINDOW_OPTIONS.find((option) => option.value === windowKey) ??
     WINDOW_OPTIONS[1];
   const currentData = data?.window === windowKey ? data : null;
+  const metricLabel = data?.property.metric === "visitors" ? "visitors" : "new users";
   const summary = currentData?.summary;
   const series = currentData?.series ?? [];
   const updatedAt = currentData?.updatedAt
@@ -296,7 +298,7 @@ export default function PropertyDetailClient({
       testId: "stat-current",
       accessibleValue:
         summary?.current !== undefined
-          ? numberFormatter.format(summary.current) + " new users"
+          ? numberFormatter.format(summary.current) + " " + metricLabel
           : isInitialLoading
             ? "Loading"
             : "Unavailable",
@@ -313,7 +315,7 @@ export default function PropertyDetailClient({
       testId: "stat-previous",
       accessibleValue:
         summary?.previous !== undefined
-          ? numberFormatter.format(summary.previous) + " new users"
+          ? numberFormatter.format(summary.previous) + " " + metricLabel
           : isInitialLoading
             ? "Loading"
             : "Unavailable",
@@ -337,7 +339,7 @@ export default function PropertyDetailClient({
           ? deltaDirection +
             " of " +
             numberFormatter.format(Math.abs(summary.delta)) +
-            " new users"
+            " " + metricLabel
           : isInitialLoading
             ? "Loading"
             : "Unavailable",
@@ -375,7 +377,7 @@ export default function PropertyDetailClient({
     ? displayName +
       " recorded " +
       numberFormatter.format(summary.current) +
-      " new users in the current " +
+      " " + metricLabel + " in the current " +
       windowMeta.label +
       ", compared with " +
       numberFormatter.format(summary.previous) +
@@ -451,7 +453,7 @@ export default function PropertyDetailClient({
               <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 <BarChart3 className="h-4 w-4 text-primary" aria-hidden="true" />
                 <span>
-                  GA4 property / <span className="font-mono">{propertyId}</span>
+                  {data?.property.source === "vercel" ? "Vercel Analytics" : "GA4 property"} / <span className="font-mono">{propertyId}</span>
                 </span>
               </div>
               <h1 className="break-words font-display text-4xl font-semibold leading-tight tracking-[-0.045em] text-foreground sm:text-5xl lg:text-6xl">
@@ -635,12 +637,13 @@ export default function PropertyDetailClient({
                   id="trend-heading"
                   className="font-display text-2xl font-semibold tracking-[-0.035em] text-card-foreground sm:text-4xl"
                 >
-                  New users trend
+                  {metricLabel === "visitors" ? "Visitors" : "New users"} trend
                 </h2>
               </div>
               <div className="flex flex-col gap-2 sm:items-end">
                 <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
                   Current {windowMeta.label} against the aligned prior window.
+                  {data?.property.source === "vercel" ? " Vercel Analytics · UTC. Daily visitor counts may not sum to the window total." : " Google Analytics."}
                 </p>
                 <div
                   className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground"

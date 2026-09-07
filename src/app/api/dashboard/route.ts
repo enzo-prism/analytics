@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCachedDashboardData } from "@/lib/ga";
+import { getCachedDashboardData } from "@/lib/portfolio";
 import type { DashboardWindow } from "@/lib/types";
 
 export const runtime = "nodejs";

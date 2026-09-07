@@ -13,6 +13,9 @@ export type DashboardProperty = {
   displayName: string;
   defaultUri: string | null;
   emoji: string;
+  source?: "ga4" | "vercel";
+  metric?: "newUsers" | "visitors";
+  metricLabel?: string;
   newUsers: NewUsersDelta | null;
   error: string | null;
 };
@@ -21,6 +24,7 @@ export type DashboardResponse = {
   updatedAt: string;
   window: DashboardWindow;
   properties: DashboardProperty[];
+  sourceWarning?: string;
 };
 
 export type TotalResponse = {
@@ -42,6 +46,9 @@ export type PropertyDetail = {
   displayName: string;
   defaultUri: string | null;
   emoji: string;
+  source?: "ga4" | "vercel";
+  metric?: "newUsers" | "visitors";
+  metricLabel?: string;
 };
 
 export type PropertyDetailResponse = {

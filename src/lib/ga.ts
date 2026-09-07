@@ -1,3 +1,4 @@
+import { TRACKED_PROJECTS } from "@/lib/tracked-projects";
 import { JWT } from "google-auth-library";
 import { unstable_cache } from "next/cache";
 import type {
@@ -552,6 +553,12 @@ const listPropertySummaries = async (
     pageToken = data.nextPageToken || undefined;
   } while (pageToken);
 
+  // Explicitly tracked GA websites stay visible when Viewer access is missing.
+  for (const project of TRACKED_PROJECTS) {
+    if (project.gaPropertyId && !summaries.some((s) => s.propertyId === project.gaPropertyId)) {
+      summaries.push({ propertyId: project.gaPropertyId, displayName: project.name });
+    }
+  }
   return summaries;
 };
 

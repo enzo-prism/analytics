@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { findTrackedProject } from "@/lib/tracked-projects";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -102,6 +103,7 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
   const [windowKey, setWindowKey] = useState<DashboardWindow>(
     initialData?.window ?? "d7",
   );
+  const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [data, setData] = useState<DashboardResponse | null>(initialData);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +132,7 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
       }
     } catch {
       if (requestId === requestIdRef.current) {
-        setError("We could not refresh Google Analytics.");
+        setError("We could not refresh analytics.");
       }
     } finally {
       if (requestId === requestIdRef.current) {
@@ -178,9 +180,10 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
     () =>
       (data?.properties ?? []).filter(
         (property) =>
-          statusFilter === "all" || getStatus(property) === statusFilter,
+          (statusFilter === "all" || getStatus(property) === statusFilter) &&
+          (projectFilter === "all" || Boolean(findTrackedProject(property.propertyId))),
       ),
-    [data, statusFilter],
+    [data, statusFilter, projectFilter],
   );
 
   const dataWindowMeta =
@@ -338,6 +341,11 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
           <span>{isLoading ? "Updating" : `Window ${dataWindowMeta.shortLabel}`}</span>
         </div>
 
+        <div className="flex gap-2" aria-label="Project group">
+          <Button variant={projectFilter === "all" ? "secondary" : "outline"} aria-pressed={projectFilter === "all"} onClick={() => setProjectFilter("all")}>All websites</Button>
+          <Button variant={projectFilter === "new" ? "secondary" : "outline"} aria-pressed={projectFilter === "new"} onClick={() => setProjectFilter("new")}>My projects</Button>
+        </div>
+        {data?.sourceWarning ? <p role="status" className="text-sm text-muted-foreground">{data.sourceWarning}</p> : null}
         <div data-testid="property-cards">
           {isInitialLoad ? (
             <div className="grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
@@ -398,10 +406,11 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
                           />
                         </div>
 
+                        <p className="mt-1 text-xs text-muted-foreground">{property.source === "vercel" ? "Vercel Analytics · UTC" : "Google Analytics"}</p>
                         <div className="mt-5 flex flex-1 items-end justify-between gap-3 sm:mt-9 sm:flex-col sm:items-start">
                           <div className="shrink-0">
                             <div className="text-xs text-muted-foreground sm:text-sm">
-                              New users · {dataWindowMeta.shortLabel}
+                              {property.metric === "visitors" ? "Visitors" : "New users"} · {dataWindowMeta.shortLabel}
                             </div>
                             <div className="mt-1 font-mono text-[2rem] font-semibold leading-none tracking-[-0.05em] text-foreground tabular-nums sm:text-4xl sm:leading-normal">
                               {property.newUsers
