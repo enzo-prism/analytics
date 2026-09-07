@@ -57,11 +57,13 @@ test("only transient Google API failures are retried", () => {
   }
 });
 
-test("hidden properties cannot be loaded directly", async () => {
-  const result = await getPropertyDetail("518332323", "d7");
+for (const propertyId of ["518332323", "478343498"]) {
+  test(`hidden property ${propertyId} cannot be loaded directly`, async () => {
+    const result = await getPropertyDetail(propertyId, "d7");
 
-  expect(result.property.propertyId).toBe("518332323");
-  expect(result.summary).toBeNull();
-  expect(result.series).toEqual([]);
-  expect(result.error).toBe("Property is excluded from the dashboard.");
-});
+    expect(result.property.propertyId).toBe(propertyId);
+    expect(result.summary).toBeNull();
+    expect(result.series).toEqual([]);
+    expect(result.error).toBe("Property is excluded from the dashboard.");
+  });
+}

@@ -74,6 +74,7 @@ The source-managed `HIDDEN_PROPERTY_IDS` set is applied before dashboard totals,
 cards, or detail responses are created. It currently excludes:
 
 - `518332323` — Saorsa Website
+- `478343498` — ED - Veneers Site (`exquisiteveneersla.com`)
 
 This removes the property from the web app without deleting or modifying the
 underlying Google Analytics property. Use `GA_PROPERTY_BLOCKLIST` for temporary

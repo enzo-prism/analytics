@@ -39,7 +39,7 @@ const PROPERTY_NAME_OVERRIDES: Record<string, string> = {
   "498175984": "Exquisite Dentistry",
   "518867337": "Family First Smile Care",
 };
-const HIDDEN_PROPERTY_IDS = new Set(["518332323"]);
+const HIDDEN_PROPERTY_IDS = new Set(["518332323", "478343498"]);
 const PROPERTY_EMOJI_OVERRIDES: Record<string, string> = {
   "508275630": "🎿",
   "498175984": "😄",

@@ -69,6 +69,7 @@ mechanism deletes or modifies the underlying Google Analytics property.
 The permanent exclusion registry currently contains:
 
 - `518332323` — Saorsa Website
+- `478343498` — ED - Veneers Site (`exquisiteveneersla.com`)
 
 When changing the registry, add or update a regression test, run the local
 verification suite, and read back both `/api/dashboard?window=d7` and the direct
