@@ -61,7 +61,7 @@ GA_PROPERTY_BLOCKLIST=
 ```
 
 Notes:
-- `GA_PRIVATE_KEY` should include escaped newlines (`\n`) if stored in a single line.
+- `GA_PRIVATE_KEY` should include escaped newlines (`\\n`) if stored in a single line.
 - `GA_PROPERTY_ALLOWLIST` is optional (comma-separated property IDs).
 - `GA_PROPERTY_BLOCKLIST` is optional (comma-separated property IDs to hide in
   addition to the permanent exclusions below).
@@ -141,8 +141,10 @@ Returns the deduplicated portfolio total and error count.
 Live GA4 + Search Console payload for Dr. Njo’s two marketing sites only:
 `michaelnjodds.com` (property `516211709` / `G-6HWEE040EH`) and
 `practicetransitionsinstitute.com` (property `502361992` / `G-XCBKH87HG5`).
-GA4 rows are filtered to production hostnames. Search Console uses the domain
-properties. CORS is limited to the Njo executive dashboard origins. The Njo
+GA4 rows are filtered to production hostnames. Search Console prefers the
+domain properties; if the service account only owns a URL-prefix property,
+the report uses that and asks for a Domain-property grant. CORS is limited
+to the Njo executive dashboard origins. The Njo
 dashboard at `https://njo-dashboard.vercel.app` reads this endpoint.
 
 Date windows end on the last completed day in each GA4 property's reporting
@@ -174,7 +176,7 @@ bounded retries with per-request timeouts.
   confirm the property has a web data stream with a default URL.
 - Missing duplicate: a newer property with the same normalized domain may have
   replaced the older property intentionally.
-- Private key issues: ensure `GA_PRIVATE_KEY` uses `\n` for newlines in Vercel.
+- Private key issues: ensure `GA_PRIVATE_KEY` uses `\\n` for newlines in Vercel.
 - Partial data: requests retry bounded 429/5xx failures, while permanent property
   errors remain visible under the Data issues filter and on the affected card.
 
