@@ -61,7 +61,7 @@ GA_PROPERTY_BLOCKLIST=
 ```
 
 Notes:
-- `GA_PRIVATE_KEY` should include escaped newlines (`\\n`) if stored in a single line.
+- `GA_PRIVATE_KEY` should include escaped newlines (`\n`) if stored in a single line.
 - `GA_PROPERTY_ALLOWLIST` is optional (comma-separated property IDs).
 - `GA_PROPERTY_BLOCKLIST` is optional (comma-separated property IDs to hide in
   addition to the permanent exclusions below).
@@ -176,7 +176,7 @@ bounded retries with per-request timeouts.
   confirm the property has a web data stream with a default URL.
 - Missing duplicate: a newer property with the same normalized domain may have
   replaced the older property intentionally.
-- Private key issues: ensure `GA_PRIVATE_KEY` uses `\\n` for newlines in Vercel.
+- Private key issues: ensure `GA_PRIVATE_KEY` uses `\n` for newlines in Vercel.
 - Partial data: requests retry bounded 429/5xx failures, while permanent property
   errors remain visible under the Data issues filter and on the affected card.
 
