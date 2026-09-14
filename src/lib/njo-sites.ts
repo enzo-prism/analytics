@@ -1,5 +1,12 @@
 import { JWT } from "google-auth-library";
 import { unstable_cache } from "next/cache";
+import {
+  gscFirstImpressionDate,
+  pickBestGscProbe,
+  rankGscUrl,
+  shouldPreferGaOrganic,
+  type GscProbeCandidate,
+} from "@/lib/njo-gsc-select";
 
 const DATA_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const GSC_BASE = "https://searchconsole.googleapis.com/webmasters/v3";
@@ -394,6 +401,7 @@ const queryGsc = async (
         endDate: range.to,
         dimensions,
         rowLimit,
+        dataState: "ALL",
       }),
     },
   );
@@ -410,15 +418,6 @@ const gscCandidateUrls = (site: NjoSiteConfig): string[] => {
   ].filter((url, index, all) => all.indexOf(url) === index);
 };
 
-const rankGscUrl = (siteUrl: string, domain: string): number => {
-  const lower = siteUrl.toLowerCase();
-  if (lower === `sc-domain:${domain}`) return 0;
-  if (lower === `https://www.${domain}/`) return 1;
-  if (lower === `https://${domain}/`) return 2;
-  if (lower.includes(domain)) return 3;
-  return 99;
-};
-
 const listGscSites = async (token: string): Promise<GscSiteEntry[]> => {
   const data = await fetchJson<{ siteEntry?: GscSiteEntry[] }>(
     `${GSC_BASE}/sites`,
@@ -427,12 +426,7 @@ const listGscSites = async (token: string): Promise<GscSiteEntry[]> => {
   return data.siteEntry ?? [];
 };
 
-const isUsableGscPermission = (level?: string): boolean => {
-  if (!level) return true;
-  return !/unverified/i.test(level);
-};
-
-const matchingGscEntries = (
+const domainGscEntries = (
   listedSites: GscSiteEntry[] | null,
   site: NjoSiteConfig,
 ): GscSiteEntry[] => {
@@ -440,18 +434,17 @@ const matchingGscEntries = (
   const domain = site.domain.toLowerCase();
   return listedSites
     .filter((entry) => (entry.siteUrl ?? "").toLowerCase().includes(domain))
-    .filter((entry) => isUsableGscPermission(entry.permissionLevel))
     .sort(
       (a, b) =>
         rankGscUrl(a.siteUrl ?? "", domain) - rankGscUrl(b.siteUrl ?? "", domain),
     );
 };
 
-const listedUrlsForSite = (
+const allListedUrlsForSite = (
   listedSites: GscSiteEntry[] | null,
   site: NjoSiteConfig,
 ): string[] =>
-  matchingGscEntries(listedSites, site)
+  domainGscEntries(listedSites, site)
     .map((entry) => entry.siteUrl)
     .filter((url): url is string => Boolean(url));
 
@@ -467,28 +460,45 @@ const probeGscSiteUrl = async (
     seen.add(url);
     return true;
   });
-  let firstOk: string | null = null;
-  for (const siteUrl of candidates) {
-    try {
-      const daily = await queryGsc(token, siteUrl, range, ["date"], DAILY_ROW_LIMIT);
-      const impressions = (daily.rows ?? []).reduce(
-        (total, row) => total + Number(row.impressions ?? 0),
-        0,
-      );
-      if (impressions > 0) {
-        console.info(`[njo-sites] ${site.id} GSC ${siteUrl} has ${impressions} impressions`);
-        return siteUrl;
+  const probed = await Promise.all(
+    candidates.map(async (siteUrl): Promise<GscProbeCandidate & { ok: boolean }> => {
+      try {
+        const daily = await queryGsc(
+          token,
+          siteUrl,
+          range,
+          ["date"],
+          DAILY_ROW_LIMIT,
+        );
+        const impressions = (daily.rows ?? []).reduce(
+          (total, row) => total + Number(row.impressions ?? 0),
+          0,
+        );
+        const startDate = gscFirstImpressionDate(daily.rows);
+        if (impressions > 0) {
+          console.info(
+            `[njo-sites] ${site.id} GSC ${siteUrl} has ${impressions} impressions starting ${startDate ?? "n/a"}`,
+          );
+        } else {
+          console.info(`[njo-sites] ${site.id} GSC ${siteUrl} responded with no rows`);
+        }
+        return { siteUrl, impressions, startDate, ok: true };
+      } catch (error) {
+        console.info(
+          `[njo-sites] ${site.id} GSC ${siteUrl} skipped`,
+          rawErrorText(error).slice(0, 180),
+        );
+        return { siteUrl, impressions: 0, startDate: null, ok: false };
       }
-      firstOk ??= siteUrl;
-      console.info(`[njo-sites] ${site.id} GSC ${siteUrl} responded with no rows`);
-    } catch (error) {
-      console.info(
-        `[njo-sites] ${site.id} GSC ${siteUrl} skipped`,
-        rawErrorText(error).slice(0, 180),
-      );
-    }
+    }),
+  );
+  const usable = probed.filter((item) => item.ok);
+  const picked = pickBestGscProbe(usable, site.domain.toLowerCase());
+  if (picked) {
+    console.info(`[njo-sites] ${site.id} GSC picked ${picked.siteUrl}`);
+    return picked.siteUrl;
   }
-  return firstOk;
+  return null;
 };
 
 const canonicalPrefixUrl = (site: NjoSiteConfig): string =>
@@ -695,7 +705,7 @@ const finishGscSite = async (
       .map((entry) => `${entry.siteUrl}:${entry.permissionLevel ?? "unknown"}`),
   );
   return (
-    (await probeGscSiteUrl(token, site, range, listedUrlsForSite(listed, site))) ??
+    (await probeGscSiteUrl(token, site, range, allListedUrlsForSite(listed, site))) ??
     siteUrl
   );
 };
@@ -799,11 +809,11 @@ const resolveGscSiteUrl = async (
   range: { from: string; to: string },
   listedSites: GscSiteEntry[] | null,
 ): Promise<GscClaimResult> => {
-  const listedUrls = listedUrlsForSite(listedSites, site);
+  const listedUrls = allListedUrlsForSite(listedSites, site);
   if (listedSites?.length) {
     console.info(
       `[njo-sites] ${site.id} listed`,
-      matchingGscEntries(listedSites, site).map(
+      domainGscEntries(listedSites, site).map(
         (entry) => `${entry.siteUrl}:${entry.permissionLevel ?? "unknown"}`,
       ),
     );
@@ -1066,7 +1076,7 @@ const fetchSiteSnapshot = async (
   listedGscSites: GscSiteEntry[] | null,
 ) => {
   const gaToken = await getGaToken();
-  const [gaDailyResult, gaPagesResult, gaChannelsResult, gscResult] =
+  const [gaDailyResult, gaPagesResult, gaChannelsResult, gscResult, gaOrganicResult] =
     await Promise.allSettled([
       runGaReport(gaToken, site.gaPropertyId, site.hostNames, range, {
         dimensions: [{ name: "date" }],
@@ -1110,7 +1120,7 @@ const fetchSiteSnapshot = async (
         );
         const tryUrls = [
           resolved.siteUrl,
-          ...listedUrlsForSite(listedGscSites, site),
+          ...allListedUrlsForSite(listedGscSites, site),
           ...gscCandidateUrls(site),
         ].filter((url, index, all): url is string => Boolean(url) && all.indexOf(url) === index);
         let lastError = resolved.error;
@@ -1149,6 +1159,7 @@ const fetchSiteSnapshot = async (
           claimError: lastError,
         };
       })(),
+      fetchGaOrganicBundle(gaToken, site, range),
     ]);
 
   const gaErrorRaw =
@@ -1182,19 +1193,25 @@ const fetchSiteSnapshot = async (
     : null;
   const nativeHasQueries = (nativeSearch?.queries.rows?.length ?? 0) > 0;
   const nativeHasTraffic = (nativeSearchTotals?.impressions ?? 0) > 0;
+  const nativeStart = gscFirstImpressionDate(nativeSearch?.daily.rows);
+  const gaOrganic =
+    gaOrganicResult.status === "fulfilled" ? gaOrganicResult.value : null;
+  const organicStart = gscFirstImpressionDate(gaOrganic?.daily.rows);
+  const useOrganicHistory = shouldPreferGaOrganic(nativeStart, organicStart);
 
-  if (!gscBundle || gscBundle.via !== "searchconsole" || !nativeHasTraffic) {
-    const gaOrganic = await fetchGaOrganicBundle(gaToken, site, range);
-    if (gaOrganic) {
-      gscBundle = {
-        ...(nativeHasQueries
-          ? { ...gaOrganic, queries: nativeSearch!.queries, via: "searchconsole" }
-          : gaOrganic),
-        metaToken: gscMetaToken,
-        fileToken: gscFileToken,
-        claimError: gscErrorRaw,
-      };
-    }
+  if (gaOrganic && (!nativeHasTraffic || useOrganicHistory)) {
+    console.info(
+      `[njo-sites] ${site.id} using GA4 organic search daily nativeStart=${nativeStart ?? "n/a"} organicStart=${organicStart ?? "n/a"}`,
+    );
+    gscBundle = {
+      ...gaOrganic,
+      queries: nativeHasQueries ? nativeSearch!.queries : gaOrganic.queries,
+      via: nativeHasQueries ? "searchconsole" : gaOrganic.via,
+      gscSiteUrl: nativeSearch?.gscSiteUrl ?? gaOrganic.gscSiteUrl,
+      metaToken: gscMetaToken,
+      fileToken: gscFileToken,
+      claimError: gscErrorRaw,
+    };
   }
 
   const gaError = publicGoogleError(gaErrorRaw, "ga4");
@@ -1269,6 +1286,14 @@ const fetchSiteSnapshot = async (
     "gscClicks",
     "gscImpressions",
   ]);
+
+  const nativeUsingDomain = (nativeSearch?.gscSiteUrl ?? "")
+    .toLowerCase()
+    .startsWith("sc-domain:");
+  const usingDomainProperty = resolvedGscSiteUrl
+    .toLowerCase()
+    .startsWith("sc-domain:");
+  const needsDomainGrant = !nativeUsingDomain;
 
   const metrics = [
     {
@@ -1356,7 +1381,9 @@ const fetchSiteSnapshot = async (
         detail: gscAvailable
           ? gscVia === "ga4"
             ? "Live organic Google Search clicks and impressions from the GA4 Search Console link. Query rows need native Search Console access."
-            : "Live Search Console searchAnalytics rows."
+            : usingDomainProperty
+              ? "Live Search Console searchAnalytics rows from the domain property."
+              : `Live Search Console rows from the URL-prefix property. Add ${serviceAccountEmail} as a Full user on ${site.gscSiteUrl} for earlier history.`
           : `${gscError ?? "Search Console unavailable."} Add ${serviceAccountEmail} as a user on this Search Console property.`,
       },
       {
@@ -1382,14 +1409,16 @@ const fetchSiteSnapshot = async (
             : "Pending",
         detail: "Earliest nonzero Search Console row in this window.",
       },
-      ...(!gscAvailable || (gscVia === "ga4" && gscQueries.length === 0)
+      ...(!gscAvailable ||
+      (gscVia === "ga4" && gscQueries.length === 0) ||
+      needsDomainGrant
         ? [
             {
               label: "GSC user to add",
               value: serviceAccountEmail,
               detail:
                 gscClaimError ??
-                "Add this service account as a user on both Search Console domain properties to load query rows.",
+                `In Search Console, open the Domain property ${site.gscSiteUrl} (not the URL-prefix). Settings → Users and permissions → Add user. Paste this service-account email, role Full. Repeat for both Njo and PTI domain properties.`,
             },
             ...(gscMetaToken
               ? [
@@ -1486,7 +1515,7 @@ export const getNjoSitesReport = async (periodId: NjoPeriodId) => {
 
 const readCachedNjoSitesReport = unstable_cache(
   async (periodId: NjoPeriodId) => getNjoSitesReport(periodId),
-  ["njo-sites-report-v7"],
+  ["njo-sites-report-v8"],
   { revalidate: 60 },
 );
 

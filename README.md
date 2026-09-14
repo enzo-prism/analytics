@@ -141,8 +141,10 @@ Returns the deduplicated portfolio total and error count.
 Live GA4 + Search Console payload for Dr. Njo’s two marketing sites only:
 `michaelnjodds.com` (property `516211709` / `G-6HWEE040EH`) and
 `practicetransitionsinstitute.com` (property `502361992` / `G-XCBKH87HG5`).
-GA4 rows are filtered to production hostnames. Search Console uses the domain
-properties. CORS is limited to the Njo executive dashboard origins. The Njo
+GA4 rows are filtered to production hostnames. Search Console prefers the
+domain properties; if the service account only owns a URL-prefix property,
+the report uses that and asks for a Domain-property grant. CORS is limited
+to the Njo executive dashboard origins. The Njo
 dashboard at `https://njo-dashboard.vercel.app` reads this endpoint.
 
 Date windows end on the last completed day in each GA4 property's reporting
