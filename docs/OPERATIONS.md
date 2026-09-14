@@ -24,15 +24,25 @@ That route uses the same service account. Grant the service account **Viewer**
 on both GA4 properties and **Full** (or at least Restricted) user access on both
 Search Console properties for those domains (domain property or URL-prefix).
 The Njo endpoint lists Search Console sites the service account can see and
-uses the matching property for each domain, so either `sc-domain:` or
-`https://example.com/` works. If the list has no match, it probes URL-prefix
-candidates, then tries to verify the property: Analytics, DNS TXT (Cloud DNS
-when the zone is in the same GCP project), then the live `/google*.html` file
-on each site (`text/plain`). Native Search Console supplies query rows.
-If Search Console is still closed, the endpoint falls back to GA4
-`organicGoogleSearch*` metrics so clicks and impressions still render. Query
-rows stay empty until the service account is a Search Console user. If both
-fail, GSC metrics show as Pending instead of fake zeros.
+probes every matching property, including unverified `sc-domain:` listings.
+It prefers the property whose searchAnalytics rows start earliest (usually the
+domain property). A newly claimed URL-prefix property that only has data from
+its verification date loses to a domain property with older history.
+
+If native Search Console history is truncated, the endpoint uses GA4
+`organicGoogleSearch*` daily rows when those start earlier (the GA4 Search
+Console link often still points at the long-lived domain property). Query rows
+still come from native Search Console when that API returns them.
+
+If the service account is not a user on `sc-domain:michaelnjodds.com` and
+`sc-domain:practicetransitionsinstitute.com`, diagnostics include **GSC user
+to add**. Enzo should add that email as a **Full** user on both **Domain**
+properties in Search Console (Settings → Users and permissions), not on the
+URL-prefix properties created for verification. After that grant, the next
+one-minute cache refresh uses the domain properties.
+
+If Search Console is still closed, GSC metrics show as Pending instead of fake
+zeros.
 
 The production service account is the authorization boundary. A property being
 visible to a human Google account does not make it visible to the dashboard.
