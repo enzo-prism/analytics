@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   gscFirstImpressionDate,
+  mergeOrganicHistoryWithNative,
   pickBestGscProbe,
   shouldPreferGaOrganic,
 } from "../src/lib/njo-gsc-select";
@@ -50,6 +51,27 @@ test("prefers GA4 organic search when it starts earlier than native GSC", () => 
   expect(shouldPreferGaOrganic("2026-09-02", "2026-09-02")).toBe(false);
   expect(shouldPreferGaOrganic(null, "2026-01-15")).toBe(true);
   expect(shouldPreferGaOrganic("2026-09-02", null)).toBe(false);
+});
+
+test("keeps newer URL-prefix days when GA4 organic history is longer", () => {
+  const merged = mergeOrganicHistoryWithNative(
+    [
+      { keys: ["2026-08-23"], clicks: 3, impressions: 12 },
+      { keys: ["2026-09-20"], clicks: 1, impressions: 25 },
+    ],
+    [
+      { keys: ["2026-09-20"], clicks: 1, impressions: 25 },
+      { keys: ["2026-09-21"], clicks: 1, impressions: 32 },
+      { keys: ["2026-09-19"], clicks: 0, impressions: 0 },
+    ],
+  );
+
+  expect(merged.map((row) => row.keys?.[0])).toEqual([
+    "2026-08-23",
+    "2026-09-20",
+    "2026-09-21",
+  ]);
+  expect(merged.at(-1)).toMatchObject({ clicks: 1, impressions: 32 });
 });
 
 test("reads the first Search Console day with clicks or impressions", () => {
