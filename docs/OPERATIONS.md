@@ -31,8 +31,12 @@ its verification date loses to a domain property with older history.
 
 If native Search Console history is truncated, the endpoint uses GA4
 `organicGoogleSearch*` daily rows when those start earlier (the GA4 Search
-Console link often still points at the long-lived domain property). Query rows
-still come from native Search Console when that API returns them.
+Console link often still points at the long-lived domain property). Native
+URL-prefix days that have traffic are overlaid on that series, because the
+prefix property publishes a day ahead of the organic link. Query rows still
+come from native Search Console when that API returns them. The All chart
+starts on the earlier of the first GA4 day and the first search day, so the
+headline totals and the chart cover the same history.
 
 If the service account is not a user on `sc-domain:michaelnjodds.com` and
 `sc-domain:practicetransitionsinstitute.com`, diagnostics include **GSC user

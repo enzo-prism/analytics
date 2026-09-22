@@ -2,6 +2,7 @@ import { JWT } from "google-auth-library";
 import { unstable_cache } from "next/cache";
 import {
   gscFirstImpressionDate,
+  mergeOrganicHistoryWithNative,
   pickBestGscProbe,
   rankGscUrl,
   shouldPreferGaOrganic,
@@ -1198,13 +1199,21 @@ const fetchSiteSnapshot = async (
     gaOrganicResult.status === "fulfilled" ? gaOrganicResult.value : null;
   const organicStart = gscFirstImpressionDate(gaOrganic?.daily.rows);
   const useOrganicHistory = shouldPreferGaOrganic(nativeStart, organicStart);
+  let blendedOrganic = false;
 
   if (gaOrganic && (!nativeHasTraffic || useOrganicHistory)) {
+    blendedOrganic = true;
     console.info(
       `[njo-sites] ${site.id} using GA4 organic search daily nativeStart=${nativeStart ?? "n/a"} organicStart=${organicStart ?? "n/a"}`,
     );
     gscBundle = {
       ...gaOrganic,
+      daily: {
+        rows: mergeOrganicHistoryWithNative(
+          gaOrganic.daily.rows,
+          nativeSearch?.daily.rows,
+        ),
+      },
       queries: nativeHasQueries ? nativeSearch!.queries : gaOrganic.queries,
       via: nativeHasQueries ? "searchconsole" : gaOrganic.via,
       gscSiteUrl: nativeSearch?.gscSiteUrl ?? gaOrganic.gscSiteUrl,
@@ -1238,8 +1247,11 @@ const fetchSiteSnapshot = async (
     .filter((value): value is string => Boolean(value))
     .sort()[0];
 
+  const historyStart = [earliestGa, earliestGsc]
+    .filter((value): value is string => Boolean(value))
+    .sort()[0];
   const dailyFrom =
-    range.id === "all" ? (earliestGa ?? earliestGsc ?? range.from) : range.from;
+    range.id === "all" ? (historyStart ?? range.from) : range.from;
   const trafficTrend = buildDailyRows({
     from: dailyFrom,
     to: range.to,
@@ -1383,7 +1395,9 @@ const fetchSiteSnapshot = async (
             ? "Live organic Google Search clicks and impressions from the GA4 Search Console link. Query rows need native Search Console access."
             : usingDomainProperty
               ? "Live Search Console searchAnalytics rows from the domain property."
-              : `Live Search Console rows from the URL-prefix property. Add ${serviceAccountEmail} as a Full user on ${site.gscSiteUrl} for earlier history.`
+              : blendedOrganic
+                ? `URL-prefix Search Console through its latest published day, with earlier days from the GA4 Search Console link. Add ${serviceAccountEmail} as a Full user on ${site.gscSiteUrl} for native history before the URL-prefix property.`
+                : `Live Search Console rows from the URL-prefix property. Add ${serviceAccountEmail} as a Full user on ${site.gscSiteUrl} for earlier history.`
           : `${gscError ?? "Search Console unavailable."} Add ${serviceAccountEmail} as a user on this Search Console property.`,
       },
       {
@@ -1515,7 +1529,7 @@ export const getNjoSitesReport = async (periodId: NjoPeriodId) => {
 
 const readCachedNjoSitesReport = unstable_cache(
   async (periodId: NjoPeriodId) => getNjoSitesReport(periodId),
-  ["njo-sites-report-v8"],
+  ["njo-sites-report-v9"],
   { revalidate: 60 },
 );
 

@@ -56,3 +56,30 @@ export const shouldPreferGaOrganic = (
   if (!nativeStart) return true;
   return organicStart < nativeStart;
 };
+
+const gscRowHasTraffic = (row: GscDateRow): boolean =>
+  Number(row.clicks ?? 0) > 0 || Number(row.impressions ?? 0) > 0;
+
+/**
+ * Keep the longer GA4 organic series, then overlay native Search Console days
+ * that have traffic. URL-prefix data currently publishes a day ahead of the
+ * GA4 organic link, and those days are the same numbers on the overlap.
+ */
+export const mergeOrganicHistoryWithNative = (
+  organicRows: GscDateRow[] = [],
+  nativeRows: GscDateRow[] = [],
+): GscDateRow[] => {
+  const byDate = new Map<string, GscDateRow>();
+  for (const row of organicRows) {
+    const date = row.keys?.[0];
+    if (date) byDate.set(date, row);
+  }
+  for (const row of nativeRows) {
+    const date = row.keys?.[0];
+    if (!date || !gscRowHasTraffic(row)) continue;
+    byDate.set(date, row);
+  }
+  return [...byDate.values()].sort((a, b) =>
+    (a.keys?.[0] ?? "").localeCompare(b.keys?.[0] ?? ""),
+  );
+};
